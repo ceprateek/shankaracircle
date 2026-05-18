@@ -380,17 +380,22 @@
     for (const b of boids) {
       let cx = 0, cy = 0, ax = 0, ay = 0, sx = 0, sy = 0, n = 0;
       const gx = (b.x / cell) | 0, gy = (b.y / cell) | 0;
-      scan:
       for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
         const arr = grid.get(key(gx + ox, gy + oy)); if (!arr) continue;
         for (let i = 0; i < arr.length; i++) {
           const o = arr[i];
           if (o === b) continue;
           const dx = o.x - b.x, dy = o.y - b.y, d2 = dx*dx + dy*dy;
-          if (d2 > per2) continue;
+          // separation is ALWAYS evaluated for every close neighbour —
+          // never gated by the NMAX perception cap, or a clump's first
+          // cell eats the budget and the overlapping bird is never seen.
+          if (d2 < sep2 && d2 > 0) {
+            const d = Math.sqrt(d2);
+            const w = (sepR - d) / (d * d);          // → blows up as d→0, 0 at sepR
+            sx -= dx * w; sy -= dy * w;
+          }
+          if (d2 > per2 || n >= NMAX) continue;       // perception cap: coh/ali only
           cx += o.x; cy += o.y; ax += o.vx; ay += o.vy; n++;
-          if (d2 < sep2 && d2 > 0) { const inv = 1/Math.sqrt(d2); sx -= dx*inv; sy -= dy*inv; }
-          if (n >= NMAX) break scan;
         }
       }
 
@@ -402,8 +407,15 @@
         const al = Math.hypot(ax, ay) || 1;
         fx += (ax/al) * maxF * cfg.ali; fy += (ay/al) * maxF * cfg.ali;
       }
-      const sl = Math.hypot(sx, sy);
-      if (sl > 0) { fx += (sx/sl) * maxF * cfg.sep; fy += (sy/sl) * maxF * cfg.sep; }
+      // separation: accumulated (not renormalised) so a crowded / overlapping
+      // bird gets a proportionally harder shove, then clamped so it can win
+      // the tug-of-war vs cohesion+alignment without exploding into jitter.
+      if (sx || sy) {
+        let fsx = sx * maxF * cfg.sep, fsy = sy * maxF * cfg.sep;
+        const sm = Math.hypot(fsx, fsy), cap = maxF * cfg.sep * 4;
+        if (sm > cap) { const k = cap / sm; fsx *= k; fsy *= k; }
+        fx += fsx; fy += fsy;
+      }
 
       // hawk (cursor) avoidance
       if (mh) {
