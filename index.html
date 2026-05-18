@@ -338,7 +338,7 @@
     // density tied to the perception radius → ~10 neighbours within cohR
     // on every screen, which is what produces dense murmuration texture.
     const S = Math.min(W, H), cohR = Math.max(S * 0.060, 30);
-    const D = 0.30 * cohR * cohR;
+    const D = 0.16 * cohR * cohR;
     return Math.max(500, Math.min(cfg.count, Math.round((W * H) / D)));
   }
   function syncCount() {
@@ -494,7 +494,7 @@
     const near = mix(P.bird, P.glow, night);
     const dim  = 0.55 + 0.45 * night;
     const cols = [ rgb(far, 0.5 * dim), rgb(midC, 0.78 * dim), rgb(near, dim) ];
-    const baseR = [ 2.1, 3.0, 4.2 ];                 // dot radius per depth layer (+50%)
+    const baseR = [ 1.4, 2.0, 2.8 ];                 // dot radius per depth layer
     const paths = [ new Path2D(), new Path2D(), new Path2D() ];
 
     for (let i = 0; i < boids.length; i++) {
