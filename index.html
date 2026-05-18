@@ -570,7 +570,7 @@
   // predator — hunts the densest cluster with a zig-zag (serpentine)
   // approach, dives through it, then peels off and exits the far side.
   // one pass every PRED_INTERVAL; first pass shortly after load.
-  const PRED_INTERVAL = 600000;                  // 10 min between passes
+  const PRED_INTERVAL = 90000;                   // 90 s between passes
   const PRED_HUNT     = 5.5;                      // s of cluster homing
   const PRED_MAXLIFE  = 18;                       // s hard cap → always exits
   const predator = { on:false, x:0, y:0, vx:0, vy:0, spd:0,
