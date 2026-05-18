@@ -46,8 +46,9 @@ No redeploy needed to tune the flock — open the panel in the live site:
 - Cursor & chrome auto-hide after 4 s idle (screensaver / kiosk friendly)
 
 The shipped defaults (slow, cohesive: speed `0.85`, cohesion `1.35`,
-separation `1.0`, **880 birds**) are the calm, dense-murmuration look; tweak
-live to taste (the Birds slider goes up to 1600).
+separation `1.0`, **4000 birds**) give a dense starling-murmuration look; the
+Birds slider ranges 2000–10000. The renderer batches birds into 3 depth layers
+(3 draw calls/frame) and caps neighbour sampling, so it stays fast at scale.
 
 ## Deploy to Vercel
 
