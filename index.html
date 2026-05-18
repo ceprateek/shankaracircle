@@ -354,10 +354,11 @@
   function step(P, dt) {
     const S = Math.min(W, H);
     // smaller perception → fast at 1000s of birds + murmuration texture
-    const per  = S * 0.055;
-    const sepR = S * 0.024;                         // wider personal space (birds are bigger now)
+    // absolute px floors so birds keep real spacing even on a tiny phone screen
+    const per  = Math.max(S * 0.06, 34);            // > sepR, always
+    const sepR = Math.max(S * 0.030, 20);           // > bird body length (≈11px)
     const per2 = per * per, sep2 = sepR * sepR;
-    const NMAX = 20;                                // cap neighbours sampled / bird
+    const NMAX = 26;                                // cap neighbours sampled / bird
     // px per frame @60fps; dt passed in is already frame-normalised (no extra ×60)
     const maxSpd = (0.65 + 0.8 * cfg.spd) * (S / 900);
     const minSpd = maxSpd * 0.6;
