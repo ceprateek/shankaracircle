@@ -550,32 +550,76 @@
   // sun / moon disc — published by drawSky, used by step as an obstacle
   const orb = { x: 0, y: 0, R: 0, on: false };
 
-  // predator — sweeps the sky in a straight line; the flock flees it.
+  // predator — hunts the densest cluster with a zig-zag (serpentine)
+  // approach, dives through it, then peels off and exits the far side.
   // one pass every PRED_INTERVAL; first pass shortly after load.
   const PRED_INTERVAL = 600000;                  // 10 min between passes
-  const predator = { on: false, x: 0, y: 0, vx: 0, vy: 0, spd: 0 };
+  const PRED_HUNT     = 5.5;                      // s of cluster homing
+  const PRED_MAXLIFE  = 18;                       // s hard cap → always exits
+  const predator = { on:false, x:0, y:0, vx:0, vy:0, spd:0,
+                     ang:0, age:0, fromLeft:true };
   let predNext = performance.now() + 20000;      // first pass ~20s after load
 
   function spawnPredator() {
-    const S = Math.min(W, H);
-    predator.spd = S * 0.26;                      // px/sec — faster than the flock
-    const mgn = S * 0.18;
-    const fromLeft = Math.random() < 0.5;
-    predator.x = fromLeft ? -mgn : W + mgn;
-    predator.y = H * (0.12 + Math.random() * 0.42);   // upper sky band
-    const vy = (Math.random() - 0.5) * predator.spd * 0.30;
-    predator.vx = (fromLeft ? 1 : -1) * predator.spd;
-    predator.vy = vy;
+    const S = Math.min(W, H), mgn = S * 0.18;
+    predator.spd = S * 0.26;                      // px/sec — faster than flock
+    predator.fromLeft = Math.random() < 0.5;
+    predator.x = predator.fromLeft ? -mgn : W + mgn;
+    predator.y = H * (0.10 + Math.random() * 0.46);
+    predator.ang = predator.fromLeft ? 0 : Math.PI;
+    predator.age = 0;
     predator.on = true;
+  }
+
+  // densest cluster centroid via a coarse bin pass over the flock
+  function densestCluster() {
+    const cs = Math.max(60, Math.min(W, H) * 0.16);
+    const cols = Math.ceil(W / cs) + 1;
+    const cnt = new Map();
+    let bestK = -1, bestN = 0;
+    for (let i = 0; i < boids.length; i++) {
+      const b = boids[i];
+      const k = ((b.x / cs) | 0) + ((b.y / cs) | 0) * cols;
+      let e = cnt.get(k);
+      if (!e) cnt.set(k, e = { n: 0, sx: 0, sy: 0 });
+      e.n++; e.sx += b.x; e.sy += b.y;
+      if (e.n > bestN) { bestN = e.n; bestK = k; }
+    }
+    if (bestK < 0) return { x: W * 0.5, y: H * 0.4 };
+    const e = cnt.get(bestK);
+    return { x: e.sx / e.n, y: e.sy / e.n };
   }
 
   function updatePredator(now, dt) {
     if (!predator.on && now >= predNext) spawnPredator();
     if (!predator.on) return;
+    predator.age += dt;
+    const mgn = Math.min(W, H) * 0.20;
+
+    // desired heading: hunt the cluster, then aim for the far exit
+    let tx, ty;
+    if (predator.age < PRED_HUNT) {
+      const c = densestCluster(); tx = c.x; ty = c.y;
+    } else {
+      tx = predator.fromLeft ? W + mgn * 2 : -mgn * 2; ty = predator.y;
+    }
+    const want = Math.atan2(ty - predator.y, tx - predator.x);
+    let d = want - predator.ang;
+    while (d >  Math.PI) d -= 2 * Math.PI;
+    while (d < -Math.PI) d += 2 * Math.PI;
+    const turn = 2.6 * dt;                         // rad/s steering limit
+    predator.ang += Math.max(-turn, Math.min(turn, d));
+
+    // serpentine: oscillate the actual heading around the steered angle
+    const zig = Math.sin(predator.age * 7.0) * 0.55;
+    const a = predator.ang + zig;
+    predator.vx = Math.cos(a) * predator.spd;
+    predator.vy = Math.sin(a) * predator.spd;
     predator.x += predator.vx * dt;
     predator.y += predator.vy * dt;
-    const mgn = Math.min(W, H) * 0.20;
-    if (predator.x < -mgn || predator.x > W + mgn ||
+
+    if (predator.age > PRED_MAXLIFE ||
+        predator.x < -mgn || predator.x > W + mgn ||
         predator.y < -mgn || predator.y > H + mgn) {
       predator.on = false;
       predNext = now + PRED_INTERVAL;
