@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1020" />
+<title>Flocking — birds at the hour of Los Angeles</title>
+<meta name="description" content="An ambient boids flocking simulation. The sky tracks the real time of day in Pacific (PDT) — dawn, midday, sunset, starlit night." />
+<meta property="og:title" content="Flocking" />
+<meta property="og:description" content="An ambient boids flock under a sky that follows the real Pacific time of day." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1020'/%3E%3Cpath d='M5 18 Q11 11 16 16 Q21 11 27 18 Q21 16 16 19 Q11 16 5 18 Z' fill='%23cdd6f4'/%3E%3C/svg%3E" />
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1020; }
+  body { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace; -webkit-tap-highlight-color: transparent; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #sky  { z-index: 0; }
+  #flock { z-index: 1; }
+
+  /* faint clock / phase label */
+  #clock {
+    position: fixed; left: 18px; bottom: 16px; z-index: 3;
+    color: rgba(255,255,255,.62); letter-spacing: .14em; text-transform: uppercase;
+    font-size: 11px; text-shadow: 0 1px 6px rgba(0,0,0,.45);
+    user-select: none; pointer-events: none;
+    transition: opacity .6s ease;
+  }
+  #clock b { font-weight: 600; color: rgba(255,255,255,.85); }
+
+  /* settings */
+  #gear {
+    position: fixed; right: 16px; bottom: 14px; z-index: 4;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,.18); background: rgba(15,18,40,.4);
+    color: rgba(255,255,255,.7); backdrop-filter: blur(6px);
+    cursor: pointer; display: grid; place-items: center; font-size: 15px;
+    transition: opacity .6s ease, transform .25s ease, background .25s ease;
+  }
+  #gear:hover { background: rgba(30,34,70,.6); transform: rotate(35deg); }
+
+  #panel {
+    position: fixed; right: 16px; bottom: 58px; z-index: 4;
+    width: 248px; padding: 16px 16px 14px;
+    background: rgba(12,15,32,.74); backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+    color: rgba(255,255,255,.82); box-shadow: 0 18px 48px rgba(0,0,0,.5);
+    opacity: 0; transform: translateY(8px) scale(.98); pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+  }
+  #panel.open { opacity: 1; transform: none; pointer-events: auto; }
+  #panel h1 { font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+               color: rgba(255,255,255,.5); margin-bottom: 12px; }
+  .row { margin: 11px 0; }
+  .row label { display: flex; justify-content: space-between; font-size: 10.5px;
+                letter-spacing: .08em; text-transform: uppercase;
+                color: rgba(255,255,255,.55); margin-bottom: 5px; }
+  .row label span { color: rgba(255,255,255,.85); }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%;
+    height: 3px; border-radius: 3px; background: rgba(255,255,255,.16); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px;
+    height: 13px; border-radius: 50%; background: #cdd6f4; cursor: pointer;
+    box-shadow: 0 1px 5px rgba(0,0,0,.5); }
+  input[type=range]::-moz-range-thumb { width: 13px; height: 13px; border: 0;
+    border-radius: 50%; background: #cdd6f4; cursor: pointer; }
+  .live { display: flex; align-items: center; justify-content: space-between;
+          padding: 8px 0 10px; border-bottom: 1px solid rgba(255,255,255,.1);
+          margin-bottom: 6px; }
+  .live span { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+               color: rgba(255,255,255,.6); }
+  .sw { position: relative; width: 38px; height: 20px; border-radius: 20px;
+        background: rgba(255,255,255,.16); cursor: pointer; transition: background .2s; }
+  .sw.on { background: #7aa2f7; }
+  .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px;
+        height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .sw.on::after { transform: translateX(18px); }
+  .acts { display: flex; gap: 8px; margin-top: 14px; }
+  .acts button { flex: 1; padding: 7px 0; font: inherit; font-size: 10.5px;
+        letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.8);
+        background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.14);
+        border-radius: 8px; cursor: pointer; transition: background .2s; }
+  .acts button:hover { background: rgba(255,255,255,.16); }
+  .hint { margin-top: 12px; font-size: 10px; color: rgba(255,255,255,.34);
+          letter-spacing: .05em; line-height: 1.7; }
+  body.idle { cursor: none; }
+  body.idle #clock, body.idle #gear { opacity: 0; }
+</style>
+</head>
+<body>
+  <canvas id="sky"></canvas>
+  <canvas id="flock"></canvas>
+
+  <div id="clock">Los Angeles · <b id="t-time">–</b> · <span id="t-phase">–</span></div>
+
+  <button id="gear" title="Settings (H)" aria-label="Settings">⚙</button>
+  <div id="panel" aria-hidden="true">
+    <h1>Flock</h1>
+    <div class="live">
+      <span>Live Pacific time</span>
+      <div class="sw on" id="liveSw" role="switch" aria-checked="true"></div>
+    </div>
+    <div class="row" id="timeRow" style="opacity:.45;pointer-events:none">
+      <label>Time of day <span id="v-time">12:00</span></label>
+      <input type="range" id="s-time" min="0" max="1439" step="1" value="720">
+    </div>
+    <div class="row">
+      <label>Birds <span id="v-count">160</span></label>
+      <input type="range" id="s-count" min="24" max="420" step="2" value="160">
+    </div>
+    <div class="row">
+      <label>Cohesion <span id="v-coh">0.9</span></label>
+      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="0.9">
+    </div>
+    <div class="row">
+      <label>Alignment <span id="v-ali">1.0</span></label>
+      <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.0">
+    </div>
+    <div class="row">
+      <label>Separation <span id="v-sep">1.3</span></label>
+      <input type="range" id="s-sep" min="0" max="3" step="0.05" value="1.3">
+    </div>
+    <div class="row">
+      <label>Speed <span id="v-spd">1.0</span></label>
+      <input type="range" id="s-spd" min="0.4" max="2" step="0.05" value="1.0">
+    </div>
+    <div class="acts">
+      <button id="b-pause">Pause</button>
+      <button id="b-reset">Reset</button>
+      <button id="b-full">Full</button>
+    </div>
+    <div class="hint">Move cursor — the flock flees it like a hawk. Click to scatter. H · panel · Space · pause · F · fullscreen</div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- canvases ----------
+  const skyC = document.getElementById("sky");
+  const flC  = document.getElementById("flock");
+  const sky  = skyC.getContext("2d");
+  const fl   = flC.getContext("2d");
+  let W = 0, H = 0, DPR = 1;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    for (const c of [skyC, flC]) {
+      c.width = Math.round(W * DPR); c.height = Math.round(H * DPR);
+    }
+    sky.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fl.setTransform(DPR, 0, 0, DPR, 0, 0);
+    fl.clearRect(0, 0, W, H);
+    buildStars();
+  }
+  window.addEventListener("resize", resize);
+
+  // ---------- Pacific time ----------
+  // Continuous hour [0,24) in America/Los_Angeles, independent of viewer's TZ.
+  const PDT_FMT = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles", hour12: false,
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+  function pacificHours() {
+    const p = {};
+    for (const x of PDT_FMT.formatToParts(new Date()))
+      if (x.type !== "literal") p[x.type] = +x.value;
+    let h = p.hour % 24;                       // some engines emit 24 at midnight
+    return h + p.minute / 60 + p.second / 3600;
+  }
+  function fmtClock(t) {
+    let h = Math.floor(t) % 24, m = Math.floor((t % 1) * 60);
+    const ap = h < 12 ? "AM" : "PM";
+    let h12 = h % 12; if (h12 === 0) h12 = 12;
+    return `${h12}:${String(m).padStart(2, "0")} ${ap}`;
+  }
+  function phaseName(t) {
+    if (t < 5)    return "Night";
+    if (t < 6.4)  return "Pre-dawn";
+    if (t < 7.8)  return "Dawn";
+    if (t < 11)   return "Morning";
+    if (t < 15)   return "Midday";
+    if (t < 17.5) return "Afternoon";
+    if (t < 19)   return "Golden hour";
+    if (t < 20.2) return "Sunset";
+    if (t < 22)   return "Dusk";
+    return "Night";
+  }
+
+  // ---------- sky palette keyframes ----------
+  // hour -> {top, bot (horizon), haze (glow band), bird (day silhouette),
+  //          glow (pale night feather color), star (0..1), body 'sun'|'moon'}
+  const C = (r, g, b) => [r, g, b];
+  const KEYS = [
+    { h: 0.0,  top:C(8,10,28),    bot:C(20,22,52),    haze:C(34,30,74),   bird:C(150,160,210), glow:C(176,188,232), star:1.00, body:"moon" },
+    { h: 5.0,  top:C(22,26,58),   bot:C(58,54,96),    haze:C(120,90,124), bird:C(120,128,170), glow:C(170,180,220), star:0.70, body:"moon" },
+    { h: 6.4,  top:C(116,120,186),bot:C(250,190,160), haze:C(255,168,138),bird:C(40,45,76),    glow:C(255,210,170), star:0.16, body:"sun"  },
+    { h: 7.8,  top:C(118,160,216),bot:C(224,224,236), haze:C(255,224,204),bird:C(54,64,96),    glow:C(255,235,210), star:0.00, body:"sun"  },
+    { h:12.5,  top:C(76,140,226), bot:C(182,212,246), haze:C(220,236,250),bird:C(40,55,86),    glow:C(255,252,238), star:0.00, body:"sun"  },
+    { h:17.0,  top:C(94,150,216), bot:C(226,206,180), haze:C(255,216,170),bird:C(50,56,82),    glow:C(255,224,180), star:0.00, body:"sun"  },
+    { h:19.0,  top:C(94,94,170),  bot:C(255,170,110), haze:C(255,138,90), bird:C(34,30,56),    glow:C(255,180,120), star:0.04, body:"sun"  },
+    { h:19.9,  top:C(70,54,136),  bot:C(255,110,96),  haze:C(255,92,112), bird:C(24,20,46),    glow:C(255,150,120), star:0.10, body:"sun"  },
+    { h:20.7,  top:C(35,34,90),   bot:C(118,70,130),  haze:C(150,80,140), bird:C(58,60,104),   glow:C(190,170,222), star:0.42, body:"moon" },
+    { h:21.6,  top:C(12,14,38),   bot:C(30,30,68),    haze:C(52,42,92),   bird:C(140,150,200), glow:C(176,188,232), star:0.90, body:"moon" },
+    { h:24.0,  top:C(8,10,28),    bot:C(20,22,52),    haze:C(34,30,74),   bird:C(150,160,210), glow:C(176,188,232), star:1.00, body:"moon" },
+  ];
+  const lerp = (a, b, f) => a + (b - a) * f;
+  const mix  = (a, b, f) => [lerp(a[0],b[0],f), lerp(a[1],b[1],f), lerp(a[2],b[2],f)];
+  const rgb  = (c, a) => a == null ? `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`
+                                   : `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+
+  function palette(t) {
+    let i = 0;
+    while (i < KEYS.length - 1 && t >= KEYS[i + 1].h) i++;
+    const a = KEYS[i], b = KEYS[Math.min(i + 1, KEYS.length - 1)];
+    const f = b.h === a.h ? 0 : (t - a.h) / (b.h - a.h);
+    return {
+      top:  mix(a.top,  b.top,  f),
+      bot:  mix(a.bot,  b.bot,  f),
+      haze: mix(a.haze, b.haze, f),
+      bird: mix(a.bird, b.bird, f),
+      glow: mix(a.glow, b.glow, f),
+      star: lerp(a.star, b.star, f),
+    };
+  }
+
+  // ---------- stars ----------
+  let stars = [];
+  function buildStars() {
+    const n = Math.round((W * H) / 5200);
+    stars = [];
+    for (let i = 0; i < n; i++)
+      stars.push({
+        x: Math.random() * W, y: Math.random() * H * 0.82,
+        r: Math.random() * 1.1 + 0.25,
+        b: Math.random() * 0.6 + 0.4,
+        tw: Math.random() * Math.PI * 2,
+        ts: Math.random() * 1.6 + 0.5,
+      });
+  }
+
+  // ---------- sky render ----------
+  const clouds = [];
+  for (let i = 0; i < 6; i++)
+    clouds.push({ x: Math.random(), y: 0.18 + Math.random() * 0.4,
+                  s: 0.10 + Math.random() * 0.16, sp: 0.004 + Math.random() * 0.01 });
+
+  function drawSky(t, P, time) {
+    // gradient
+    const g = sky.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, rgb(P.top));
+    g.addColorStop(0.62, rgb(mix(P.top, P.bot, 0.55)));
+    g.addColorStop(1, rgb(P.bot));
+    sky.fillStyle = g; sky.fillRect(0, 0, W, H);
+
+    // sun / moon along a day arc
+    let bodyA;
+    if (t > 6.0 && t < 20.3) {                       // sun
+      const f = (t - 6.0) / (20.3 - 6.0);
+      const bx = W * (0.08 + f * 0.84);
+      const by = H * (0.92 - Math.sin(f * Math.PI) * 0.74);
+      bodyA = { x: bx, y: by, R: Math.min(W, H) * 0.052,
+                col: P.glow, edge: Math.min((t - 6) / 0.7, (20.3 - t) / 0.7, 1) };
+    } else {                                          // moon
+      const tn = t >= 20.3 ? t - 20.3 : t + 3.7;      // 0..(3.7+6) night span
+      const f = tn / 9.7;
+      const bx = W * (0.12 + f * 0.76);
+      const by = H * (0.86 - Math.sin(f * Math.PI) * 0.66);
+      bodyA = { x: bx, y: by, R: Math.min(W, H) * 0.040,
+                col: P.glow, edge: 1 };
+    }
+    if (bodyA.edge > 0.01) {
+      const { x, y, R, col, edge } = bodyA;
+      const halo = sky.createRadialGradient(x, y, 0, x, y, R * 7);
+      halo.addColorStop(0,    rgb(col, 0.5 * edge));
+      halo.addColorStop(0.18, rgb(col, 0.22 * edge));
+      halo.addColorStop(1,    rgb(col, 0));
+      sky.fillStyle = halo;
+      sky.beginPath(); sky.arc(x, y, R * 7, 0, 7); sky.fill();
+      const core = sky.createRadialGradient(x, y, 0, x, y, R);
+      core.addColorStop(0, rgb(mix(col, [255,255,255], 0.5), edge));
+      core.addColorStop(1, rgb(col, 0.85 * edge));
+      sky.fillStyle = core;
+      sky.beginPath(); sky.arc(x, y, R, 0, 7); sky.fill();
+    }
+
+    // drifting clouds (fade out at night)
+    const cloudA = (1 - P.star) * 0.5;
+    if (cloudA > 0.01) {
+      for (const c of clouds) {
+        c.x += c.sp * 0.0016; if (c.x > 1.25) c.x = -0.25;
+        const cx = c.x * W, cy = c.y * H, cr = c.s * Math.min(W, H);
+        const cg = sky.createRadialGradient(cx, cy, 0, cx, cy, cr);
+        cg.addColorStop(0, rgb(P.haze, 0.34 * cloudA));
+        cg.addColorStop(1, rgb(P.haze, 0));
+        sky.fillStyle = cg;
+        sky.beginPath(); sky.ellipse(cx, cy, cr * 1.7, cr, 0, 0, 7); sky.fill();
+      }
+    }
+
+    // stars
+    if (P.star > 0.02) {
+      for (const s of stars) {
+        const tw = 0.6 + 0.4 * Math.sin(time * 0.001 * s.ts + s.tw);
+        sky.globalAlpha = P.star * s.b * tw;
+        sky.fillStyle = "#fff";
+        sky.beginPath(); sky.arc(s.x, s.y, s.r, 0, 7); sky.fill();
+      }
+      sky.globalAlpha = 1;
+    }
+
+    // horizon glow band
+    const hb = sky.createLinearGradient(0, H * 0.5, 0, H);
+    hb.addColorStop(0, rgb(P.haze, 0));
+    hb.addColorStop(1, rgb(P.haze, 0.34));
+    sky.fillStyle = hb; sky.fillRect(0, H * 0.5, W, H * 0.5);
+  }
+
+  // ---------- flock ----------
+  const cfg = { count: 160, coh: 0.9, ali: 1.0, sep: 1.3, spd: 1.0 };
+  let boids = [];
+
+  function makeBoid() {
+    const a = Math.random() * Math.PI * 2;
+    const z = Math.random();                       // depth 0 far .. 1 near
+    return {
+      x: Math.random() * W, y: Math.random() * H * 0.85,
+      vx: Math.cos(a), vy: Math.sin(a),
+      z, ph: Math.random() * Math.PI * 2,          // wing-flap phase
+    };
+  }
+  function reseed(n) {
+    boids = [];
+    for (let i = 0; i < n; i++) boids.push(makeBoid());
+  }
+
+  function step(P, dt) {
+    const S = Math.min(W, H);
+    const per  = S * 0.085;                         // perception radius
+    const sepR = S * 0.030;
+    const per2 = per * per, sep2 = sepR * sepR;
+    const maxSpd = (1.7 + 1.3 * cfg.spd) * (S / 900) * 60;
+    const minSpd = maxSpd * 0.55;
+    const maxF   = maxSpd * 0.045;
+
+    // spatial hash
+    const cell = per, grid = new Map();
+    const key = (cx, cy) => cx + "," + cy;
+    for (const b of boids) {
+      const k = key((b.x / cell) | 0, (b.y / cell) | 0);
+      (grid.get(k) || grid.set(k, []).get(k)).push(b);
+    }
+
+    const mh = hawk.on ? hawk : null;
+    const hawkR = S * 0.16 * (1 + scatter * 2);
+    const hawkR2 = hawkR * hawkR;
+
+    for (const b of boids) {
+      let cx = 0, cy = 0, ax = 0, ay = 0, sx = 0, sy = 0, n = 0;
+      const gx = (b.x / cell) | 0, gy = (b.y / cell) | 0;
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
+        const arr = grid.get(key(gx + ox, gy + oy)); if (!arr) continue;
+        for (const o of arr) {
+          if (o === b) continue;
+          const dx = o.x - b.x, dy = o.y - b.y, d2 = dx*dx + dy*dy;
+          if (d2 > per2) continue;
+          cx += o.x; cy += o.y; ax += o.vx; ay += o.vy; n++;
+          if (d2 < sep2 && d2 > 0) { const inv = 1/Math.sqrt(d2); sx -= dx*inv; sy -= dy*inv; }
+        }
+      }
+
+      let fx = 0, fy = 0;
+      if (n > 0) {
+        cx = cx/n - b.x; cy = cy/n - b.y;
+        const cl = Math.hypot(cx, cy) || 1;
+        fx += (cx/cl) * maxF * cfg.coh; fy += (cy/cl) * maxF * cfg.coh;
+        const al = Math.hypot(ax, ay) || 1;
+        fx += (ax/al) * maxF * cfg.ali; fy += (ay/al) * maxF * cfg.ali;
+      }
+      const sl = Math.hypot(sx, sy);
+      if (sl > 0) { fx += (sx/sl) * maxF * cfg.sep; fy += (sy/sl) * maxF * cfg.sep; }
+
+      // hawk (cursor) avoidance
+      if (mh) {
+        const dx = b.x - mh.x, dy = b.y - mh.y, d2 = dx*dx + dy*dy;
+        if (d2 < hawkR2 && d2 > 1) {
+          const d = Math.sqrt(d2), s = (1 - d / hawkR);
+          fx += (dx/d) * maxF * (5 + 10*scatter) * s;
+          fy += (dy/d) * maxF * (5 + 10*scatter) * s;
+        }
+      }
+
+      // soft edge steering
+      const m = S * 0.10;
+      if (b.x < m)       fx += maxF * 1.4 * (1 - b.x / m);
+      if (b.x > W - m)   fx -= maxF * 1.4 * (1 - (W - b.x) / m);
+      if (b.y < m)       fy += maxF * 1.4 * (1 - b.y / m);
+      if (b.y > H - m)   fy -= maxF * 1.4 * (1 - (H - b.y) / m);
+
+      // gentle wander
+      b.ph += 0.02;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxF * 0.16;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxF * 0.16;
+
+      b.vx += fx * dt; b.vy += fy * dt;
+      const zf = 0.72 + 0.5 * b.z;                  // near birds fly faster
+      let sp = Math.hypot(b.vx, b.vy);
+      const lo = minSpd * zf, hi = maxSpd * zf;
+      if (sp > hi) { b.vx = b.vx/sp*hi; b.vy = b.vy/sp*hi; sp = hi; }
+      else if (sp < lo && sp > 0) { b.vx = b.vx/sp*lo; b.vy = b.vy/sp*lo; sp = lo; }
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      b.spd = sp;
+    }
+  }
+
+  function drawFlock(P, time) {
+    // trail-aware clear: opaque in daylight, long fade at night (murmuration)
+    const clear = 1 - 0.86 * P.star;
+    fl.globalCompositeOperation = "destination-out";
+    fl.fillStyle = `rgba(0,0,0,${clear})`;
+    fl.fillRect(0, 0, W, H);
+    fl.globalCompositeOperation = "source-over";
+
+    const list = boids.slice().sort((a, b) => a.z - b.z);  // far first
+    const night = P.star;
+    const glowOn = night > 0.25 && boids.length <= 280;
+    if (glowOn) fl.shadowColor = rgb(P.glow, 0.9);
+
+    for (const b of list) {
+      const sc = 3.0 + b.z * 5.5;
+      const ang = Math.atan2(b.vy, b.vx);
+      // depth haze: distant birds blend toward the horizon
+      let col = mix(b.z < 1 ? mix(P.bird, P.bot, (1 - b.z) * 0.30) : P.bird,
+                    P.glow, night);
+      const alpha = (0.5 + 0.5 * b.z) * (0.55 + 0.45 * (1 - night) + night);
+
+      // wing-beat — wings sweep from flat to raised; faster when flying faster
+      const flap = Math.abs(Math.sin(b.ph * 2.4 + b.spd * 0.05));
+      const span = (0.46 + 0.54 * flap) * sc;       // half wingspan (±y)
+
+      fl.save();
+      fl.translate(b.x, b.y);
+      fl.rotate(ang);                               // +x = flight direction
+      fl.globalAlpha = Math.min(alpha, 1);
+      fl.fillStyle = rgb(col);
+      if (glowOn) fl.shadowBlur = 5 * b.z * night;
+      fl.beginPath();
+      fl.moveTo(0.95 * sc, 0);                                       // beak
+      fl.lineTo(-0.55 * sc, -span);                                  // L wingtip (back+out)
+      fl.quadraticCurveTo(-0.28 * sc, -0.10 * sc, -0.40 * sc, 0);    // trailing edge
+      fl.quadraticCurveTo(-0.28 * sc,  0.10 * sc, -0.55 * sc, span); // R wingtip
+      fl.closePath();
+      fl.fill();
+      fl.restore();
+    }
+    fl.shadowBlur = 0; fl.globalAlpha = 1;
+
+    // scatter ripple
+    if (ripple.a > 0.01) {
+      fl.strokeStyle = rgb(P.glow, ripple.a * 0.5);
+      fl.lineWidth = 2;
+      fl.beginPath(); fl.arc(ripple.x, ripple.y, ripple.r, 0, 7); fl.stroke();
+      ripple.r += 9; ripple.a *= 0.93;
+    }
+  }
+
+  // ---------- interaction ----------
+  const hawk = { x: 0, y: 0, on: false };
+  let scatter = 0;
+  const ripple = { x: 0, y: 0, r: 0, a: 0 };
+
+  function pointer(e) {
+    const p = e.touches ? e.touches[0] : e;
+    if (!p) return;
+    hawk.x = p.clientX; hawk.y = p.clientY; hawk.on = true;
+    wake();
+  }
+  flC.addEventListener("mousemove", pointer);
+  flC.addEventListener("touchmove", e => { pointer(e); }, { passive: true });
+  flC.addEventListener("mouseleave", () => { hawk.on = false; });
+  function scatterAt(x, y) {
+    hawk.x = x; hawk.y = y; hawk.on = true; scatter = 1;
+    ripple.x = x; ripple.y = y; ripple.r = 8; ripple.a = 1;
+  }
+  flC.addEventListener("mousedown", e => scatterAt(e.clientX, e.clientY));
+  flC.addEventListener("touchstart", e => {
+    const p = e.touches[0]; if (p) scatterAt(p.clientX, p.clientY);
+  }, { passive: true });
+
+  // ---------- UI ----------
+  const $ = id => document.getElementById(id);
+  let live = true, manualMin = 720, paused = false;
+
+  const panel = $("panel"), gear = $("gear"), liveSw = $("liveSw"),
+        timeRow = $("timeRow");
+  function togglePanel(f) {
+    const open = f == null ? !panel.classList.contains("open") : f;
+    panel.classList.toggle("open", open);
+    panel.setAttribute("aria-hidden", String(!open));
+  }
+  gear.addEventListener("click", () => togglePanel());
+  liveSw.addEventListener("click", () => {
+    live = !live;
+    liveSw.classList.toggle("on", live);
+    liveSw.setAttribute("aria-checked", String(live));
+    timeRow.style.opacity = live ? ".45" : "1";
+    timeRow.style.pointerEvents = live ? "none" : "auto";
+  });
+  $("s-time").addEventListener("input", e => {
+    manualMin = +e.target.value;
+    if (live) liveSw.click();
+  });
+  const bind = (id, key, vid, fmt) => $(id).addEventListener("input", e => {
+    cfg[key] = +e.target.value;
+    $(vid).textContent = fmt ? fmt(cfg[key]) : cfg[key];
+    if (key === "count") {
+      const d = cfg.count - boids.length;
+      if (d > 0) for (let i = 0; i < d; i++) boids.push(makeBoid());
+      else boids.length = cfg.count;
+    }
+  });
+  bind("s-count", "count", "v-count");
+  bind("s-coh", "coh", "v-coh", v => v.toFixed(2));
+  bind("s-ali", "ali", "v-ali", v => v.toFixed(2));
+  bind("s-sep", "sep", "v-sep", v => v.toFixed(2));
+  bind("s-spd", "spd", "v-spd", v => v.toFixed(2));
+
+  $("b-pause").addEventListener("click", () => {
+    paused = !paused; $("b-pause").textContent = paused ? "Play" : "Pause";
+  });
+  $("b-reset").addEventListener("click", () => reseed(cfg.count));
+  function fullscreen() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  }
+  $("b-full").addEventListener("click", fullscreen);
+
+  addEventListener("keydown", e => {
+    if (e.key === "h" || e.key === "H") togglePanel();
+    else if (e.code === "Space") { e.preventDefault(); $("b-pause").click(); }
+    else if (e.key === "r" || e.key === "R") reseed(cfg.count);
+    else if (e.key === "f" || e.key === "F") fullscreen();
+  });
+
+  // idle / screensaver hide
+  let idleT = 0;
+  function wake() {
+    document.body.classList.remove("idle");
+    clearTimeout(idleT);
+    idleT = setTimeout(() => document.body.classList.add("idle"), 4000);
+  }
+  addEventListener("mousemove", wake);
+  addEventListener("touchstart", wake, { passive: true });
+  addEventListener("keydown", wake);
+
+  // ---------- loop ----------
+  const tTime = $("t-time"), tPhase = $("t-phase"), vTime = $("v-time"),
+        sTime = $("s-time");
+  let last = performance.now(), running = true;
+  document.addEventListener("visibilitychange",
+    () => { running = !document.hidden; if (running) last = performance.now(); });
+
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (!running) return;
+    let dt = (now - last) / 1000; last = now;
+    dt = Math.min(dt, 0.05);
+
+    const t = live ? pacificHours() : manualMin / 60;
+    const P = palette(t);
+
+    tTime.textContent  = fmtClock(t);
+    tPhase.textContent = phaseName(t);
+    if (live) sTime.value = Math.round((t * 60) % 1440);
+    vTime.textContent = fmtClock(live ? t : manualMin / 60);
+
+    drawSky(t, P, now);
+    if (!paused) step(P, dt * 60);
+    drawFlock(P, now);
+
+    if (scatter > 0) scatter = Math.max(0, scatter - dt * 1.6);
+  }
+
+  resize();
+  reseed(cfg.count);
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    cfg.spd = 0.7; cfg.count = 90; reseed(cfg.count); $("s-count").value = 90;
+  }
+  wake();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
