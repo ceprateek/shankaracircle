@@ -108,8 +108,8 @@
       <input type="range" id="s-count" min="2000" max="10000" step="50" value="5000">
     </div>
     <div class="row">
-      <label>Cohesion <span id="v-coh">1.00</span></label>
-      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="1.0">
+      <label>Cohesion <span id="v-coh">2.00</span></label>
+      <input type="range" id="s-coh" min="0" max="4" step="0.05" value="2.0">
     </div>
     <div class="row">
       <label>Alignment <span id="v-ali">1.00</span></label>
@@ -320,7 +320,7 @@
   }
 
   // ---------- flock ----------
-  const cfg = { count: 6000, coh: 1.0, ali: 1.0, sep: 1.0, spd: 1.0 };
+  const cfg = { count: 6000, coh: 2.0, ali: 1.0, sep: 1.0, spd: 1.0 };
   let boids = [];
 
   function makeBoid() {
