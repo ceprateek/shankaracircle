@@ -494,21 +494,15 @@
     const near = mix(P.bird, P.glow, night);
     const dim  = 0.55 + 0.45 * night;
     const cols = [ rgb(far, 0.5 * dim), rgb(midC, 0.78 * dim), rgb(near, dim) ];
-    const baseL = [ 4.0, 6.0, 8.8 ], baseW = [ 1.9, 2.8, 3.9 ];
+    const baseR = [ 1.4, 2.0, 2.8 ];                 // dot radius per depth layer
     const paths = [ new Path2D(), new Path2D(), new Path2D() ];
 
     for (let i = 0; i < boids.length; i++) {
       const b = boids[i];
-      const sp = Math.hypot(b.vx, b.vy) || 1;
-      const ca = b.vx / sp, sa = b.vy / sp;          // heading from velocity, no trig
       const li = b.z < 0.34 ? 0 : b.z < 0.67 ? 1 : 2;
-      const L = baseL[li] * b.s, Wd = baseW[li] * b.s, hx = -0.5 * L;
-      const x = b.x, y = b.y;
-      const nx  = x + ca * L,            ny  = y + sa * L;
-      const blx = x + ca * hx - sa * Wd, bly = y + sa * hx + ca * Wd;
-      const brx = x + ca * hx + sa * Wd, bry = y + sa * hx - ca * Wd;
+      const r = baseR[li] * b.s, x = b.x, y = b.y;
       const pth = paths[li];
-      pth.moveTo(nx, ny); pth.lineTo(blx, bly); pth.lineTo(brx, bry);
+      pth.moveTo(x + r, y); pth.arc(x, y, r, 0, 7);  // moveTo: no connecting line
     }
     for (let i = 0; i < 3; i++) { fl.fillStyle = cols[i]; fl.fill(paths[i]); }
 
