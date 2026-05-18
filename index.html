@@ -435,7 +435,7 @@
     const near = mix(P.bird, P.glow, night);
     const dim  = 0.55 + 0.45 * night;
     const cols = [ rgb(far, 0.5 * dim), rgb(midC, 0.78 * dim), rgb(near, dim) ];
-    const baseL = [ 2.0, 3.0, 4.4 ], baseW = [ 0.95, 1.4, 1.95 ];
+    const baseL = [ 4.0, 6.0, 8.8 ], baseW = [ 1.9, 2.8, 3.9 ];
     const paths = [ new Path2D(), new Path2D(), new Path2D() ];
 
     for (let i = 0; i < boids.length; i++) {
