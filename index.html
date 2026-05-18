@@ -108,16 +108,16 @@
       <input type="range" id="s-count" min="2000" max="10000" step="50" value="5000">
     </div>
     <div class="row">
-      <label>Cohesion <span id="v-coh">0.45</span></label>
-      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="0.45">
+      <label>Cohesion <span id="v-coh">1.00</span></label>
+      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="1.0">
     </div>
     <div class="row">
-      <label>Alignment <span id="v-ali">1.30</span></label>
-      <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.3">
+      <label>Alignment <span id="v-ali">1.00</span></label>
+      <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.0">
     </div>
     <div class="row">
-      <label>Separation <span id="v-sep">3.0</span></label>
-      <input type="range" id="s-sep" min="0" max="5" step="0.05" value="3.0">
+      <label>Separation <span id="v-sep">1.00</span></label>
+      <input type="range" id="s-sep" min="0" max="5" step="0.05" value="1.0">
     </div>
     <div class="row">
       <label>Speed <span id="v-spd">1.0</span></label>
@@ -318,14 +318,14 @@
   }
 
   // ---------- flock ----------
-  const cfg = { count: 5000, coh: 0.45, ali: 1.3, sep: 3.0, spd: 1.0 };
+  const cfg = { count: 6000, coh: 1.0, ali: 1.0, sep: 1.0, spd: 1.0 };
   let boids = [];
 
   function makeBoid() {
     const a = Math.random() * Math.PI * 2;
     const z = Math.random();                       // depth 0 far .. 1 near
     return {
-      x: Math.random() * W, y: Math.random() * H * 0.85,
+      x: Math.random() * W, y: Math.random() * H,
       vx: Math.cos(a), vy: Math.sin(a),
       z, ph: Math.random() * Math.PI * 2,
       s: 0.75 + Math.random() * 0.55,              // per-bird size variance
@@ -333,10 +333,11 @@
   }
   // actual flock size scales with viewport — far fewer on a phone than a desktop
   function targetCount() {
-    // one bird per ~620 px² → consistent clean spacing on every screen
-    // (phone gets ~half what it used to). Birds slider is a ceiling, not
-    // a fixed target, so density never exceeds the clean-spacing budget.
-    return Math.max(300, Math.min(cfg.count, Math.round((W * H) / 620)));
+    // density tied to the perception radius → ~10 neighbours within cohR
+    // on every screen, which is what produces dense murmuration texture.
+    const S = Math.min(W, H), cohR = Math.max(S * 0.060, 30);
+    const D = 0.30 * cohR * cohR;
+    return Math.max(500, Math.min(cfg.count, Math.round((W * H) / D)));
   }
   function syncCount() {
     const tc = targetCount();
@@ -355,119 +356,103 @@
 
   function step(P, dt) {
     const S = Math.min(W, H);
-    // smaller perception → fast at 1000s of birds + murmuration texture
-    // absolute px floors so birds keep real spacing even on a tiny phone screen
-    // perception MUST be several × sepR or the flock is just a uniform
-    // repulsive gas with no large-scale correlation (no waves / bands).
-    const per  = Math.max(S * 0.20, 120);           // ≈5× sepR → murmuration field
-    const sepR = Math.max(S * 0.030, 24);           // clears ≈11px body + gap
-    const per2 = per * per, sep2 = sepR * sepR;
-    const NMAX = 40;                                // cap neighbours sampled / bird
-    // px per frame @60fps; dt passed in is already frame-normalised (no extra ×60)
-    const maxSpd = (0.65 + 0.8 * cfg.spd) * (S / 900);
-    const minSpd = maxSpd * 0.6;
-    const maxF   = maxSpd * 0.055;
+    // ported from the reference boids: weak proportional forces + constant
+    // forward drive + hard short-range core + toroidal wrap. radii scale
+    // with the screen so the look is consistent on phone and desktop.
+    const cohR   = Math.max(S * 0.060, 30);         // perceive / cohere
+    const aliR   = cohR * 0.70;                     // velocity matching
+    const sepR   = cohR * 0.55;                     // gentle wide separation
+    const closeR = Math.max(cohR * 0.22, 7);        // hard anti-overlap core
+    const cohR2 = cohR*cohR, aliR2 = aliR*aliR,
+          sepR2 = sepR*sepR, closeR2 = closeR*closeR;
 
-    // spatial hash (numeric keys — no per-frame string allocation)
-    const cell = per, grid = new Map();
-    const key = (cx, cy) => (cx + 2048) * 8192 + (cy + 2048);
+    const maxSpd = (0.55 + 0.6 * cfg.spd) * (S / 900);
+    const DR   = maxSpd * 0.07;                      // constant forward drive
+    const cohK = (maxSpd * 0.10 / cohR) * cfg.coh;   // weak spring to centre
+    const aliK = 0.025 * cfg.ali;                    // velocity matching
+    const sepK = maxSpd * 0.012 * cfg.sep;           // gentle wide separation
+    const coreK= maxSpd * 3.0;                       // short-range hard core
+
+    // toroidal spatial hash — wrapped cell indices, no edge cells
+    const cell = cohR;
+    const ncx = Math.max(1, Math.ceil(W / cell));
+    const ncy = Math.max(1, Math.ceil(H / cell));
+    const wrapc = (c, n) => ((c % n) + n) % n;
+    const key = (cx, cy) => cx * 8192 + cy;
+    const grid = new Map();
     for (const b of boids) {
-      const k = key((b.x / cell) | 0, (b.y / cell) | 0);
+      const k = key(wrapc((b.x / cell) | 0, ncx), wrapc((b.y / cell) | 0, ncy));
       let a = grid.get(k); if (!a) grid.set(k, a = []);
       a.push(b);
     }
 
     const mh = hawk.on ? hawk : null;
-    const hawkR = S * 0.16 * (1 + scatter * 2);
-    const hawkR2 = hawkR * hawkR;
+    const hawkR = S * 0.16 * (1 + scatter * 2), hawkR2 = hawkR * hawkR;
+    const halfW = W / 2, halfH = H / 2;
 
+    // pass 1 — forces from the start-of-frame snapshot
     for (const b of boids) {
-      let cx = 0, cy = 0, ax = 0, ay = 0, sx = 0, sy = 0, n = 0;
-      let ndx = 0, ndy = 0, nd2 = Infinity;          // single nearest neighbour
-      const gx = (b.x / cell) | 0, gy = (b.y / cell) | 0;
+      let cx = 0, cy = 0, n = 0, avx = 0, avy = 0, an = 0,
+          sx = 0, sy = 0, kx = 0, ky = 0;
+      const gx = wrapc((b.x / cell) | 0, ncx), gy = wrapc((b.y / cell) | 0, ncy);
+      const seen = new Set();
       for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
-        const arr = grid.get(key(gx + ox, gy + oy)); if (!arr) continue;
+        const kk = key(wrapc(gx + ox, ncx), wrapc(gy + oy, ncy));
+        if (seen.has(kk)) continue;                  // small grids: dedupe wrap
+        seen.add(kk);
+        const arr = grid.get(kk); if (!arr) continue;
         for (let i = 0; i < arr.length; i++) {
           const o = arr[i];
           if (o === b) continue;
-          const dx = o.x - b.x, dy = o.y - b.y, d2 = dx*dx + dy*dy;
-          // separation is ALWAYS evaluated for every close neighbour —
-          // never gated by the NMAX perception cap, or a clump's first
-          // cell eats the budget and the overlapping bird is never seen.
-          if (d2 < sep2 && d2 > 0) {
-            const d = Math.sqrt(d2);
-            const w = (sepR - d) / d;                // strong at body scale, 0 at sepR
-            sx -= dx * w; sy -= dy * w;
-            if (d2 < nd2) { nd2 = d2; ndx = dx; ndy = dy; }
-          }
-          if (d2 > per2 || n >= NMAX) continue;       // perception cap: coh/ali only
-          cx += o.x; cy += o.y; ax += o.vx; ay += o.vy; n++;
+          let dx = o.x - b.x, dy = o.y - b.y;
+          if (dx >  halfW) dx -= W; else if (dx < -halfW) dx += W;
+          if (dy >  halfH) dy -= H; else if (dy < -halfH) dy += H;
+          const d2 = dx*dx + dy*dy;
+          if (d2 > cohR2 || d2 === 0) continue;
+          const d = Math.sqrt(d2);
+          cx += dx; cy += dy; n++;                              // cohesion
+          if (d2 < aliR2) { avx += o.vx; avy += o.vy; an++; }    // alignment
+          if (d2 < sepR2) { const w = (sepR - d) / (d * sepR);   // separation
+            sx -= dx * w; sy -= dy * w; }
+          if (d2 < closeR2) { const u = (closeR - d) / (d * closeR);
+            kx -= dx * u; ky -= dy * u; }                        // hard core
         }
       }
 
       let fx = 0, fy = 0;
-      if (n > 0) {
-        cx = cx/n - b.x; cy = cy/n - b.y;
-        const cl = Math.hypot(cx, cy) || 1;
-        fx += (cx/cl) * maxF * cfg.coh; fy += (cy/cl) * maxF * cfg.coh;
-        const al = Math.hypot(ax, ay) || 1;
-        fx += (ax/al) * maxF * cfg.ali; fy += (ay/al) * maxF * cfg.ali;
-      }
-      // separation: accumulated (not renormalised) so a crowded / overlapping
-      // bird gets a proportionally harder shove, then clamped so it can win
-      // the tug-of-war vs cohesion+alignment without exploding into jitter.
-      if (sx || sy) {
-        let fsx = sx * maxF * cfg.sep, fsy = sy * maxF * cfg.sep;
-        const sm = Math.hypot(fsx, fsy), cap = maxF * cfg.sep * 5;
-        if (sm > cap) { const k = cap / sm; fsx *= k; fsy *= k; }
-        fx += fsx; fy += fsy;
-        // nearest-neighbour hard shove — a non-cancelling pair force so
-        // a bird buried in a symmetric clump (where the summed sep above
-        // cancels to ~0) is still pushed off its single closest collider.
-        if (nd2 < sep2) {
-          const nd = Math.sqrt(nd2), pen = 1 - nd / sepR;       // 0..1 overlap
-          const g = maxF * cfg.sep * 6 * pen * pen / nd;
-          fx -= ndx * g; fy -= ndy * g;
-        }
-      }
+      if (n  > 0) { fx += (cx / n) * cohK;            fy += (cy / n) * cohK; }
+      if (an > 0) { fx += (avx/an - b.vx) * aliK;     fy += (avy/an - b.vy) * aliK; }
+      fx += sx * sepK + kx * coreK;
+      fy += sy * sepK + ky * coreK;
 
       // hawk (cursor) avoidance
       if (mh) {
         const dx = b.x - mh.x, dy = b.y - mh.y, d2 = dx*dx + dy*dy;
         if (d2 < hawkR2 && d2 > 1) {
-          const d = Math.sqrt(d2), s = (1 - d / hawkR);
-          fx += (dx/d) * maxF * (5 + 10*scatter) * s;
-          fy += (dy/d) * maxF * (5 + 10*scatter) * s;
+          const d = Math.sqrt(d2), s = (1 - d / hawkR) * maxSpd * (0.8 + 2.0*scatter);
+          fx += (dx/d) * s; fy += (dy/d) * s;
         }
       }
 
-      // edge containment — LINEAR ramp (not quadratic: a quadratic
-      // force-wall compresses the flock into an overlapping rim) but
-      // strong enough that the flock can't drain onto an edge.
-      const m = S * 0.20, eF = maxF * 2.6;
-      if (b.x < m)          { fx += eF * (1 - b.x / m); }
-      else if (b.x > W - m) { fx -= eF * (1 - (W - b.x) / m); }
-      if (b.y < m)          { fy += eF * (1 - b.y / m); }
-      else if (b.y > H - m) { fy -= eF * (1 - (H - b.y) / m); }
-
-      // wander — breaks up uniform drift so they don't march into a wall together
+      // gentle wander breaks lockstep without destroying the flow
       b.ph += 0.02;
-      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxF * 0.16;
-      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxF * 0.16;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.05;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.05;
 
-      b.vx += fx * dt; b.vy += fy * dt;
-      const zf = 0.72 + 0.5 * b.z;                  // near birds fly faster
+      b.fx = fx; b.fy = fy;
+    }
+
+    // pass 2 — integrate, constant drive, clamp, toroidal wrap
+    for (const b of boids) {
+      b.vx += b.fx * dt; b.vy += b.fy * dt;
       let sp = Math.hypot(b.vx, b.vy);
-      const lo = minSpd * zf, hi = maxSpd * zf;
-      if (sp > hi) { b.vx = b.vx/sp*hi; b.vy = b.vy/sp*hi; sp = hi; }
-      else if (sp < lo && sp > 0) { b.vx = b.vx/sp*lo; b.vy = b.vy/sp*lo; sp = lo; }
+      if (sp > 0) { b.vx += (b.vx/sp) * DR * dt; b.vy += (b.vy/sp) * DR * dt; }
+      const hi = maxSpd * (0.78 + 0.42 * b.z);       // near birds fly faster
+      sp = Math.hypot(b.vx, b.vy);
+      if (sp > hi) { const k = hi / sp; b.vx *= k; b.vy *= k; }
       b.x += b.vx * dt; b.y += b.vy * dt;
-      const pad = 5;                                // reflect inward — never absorb
-      if (b.x < pad)        { b.x = pad;     if (b.vx < 0) b.vx *= -0.5; }
-      else if (b.x > W-pad) { b.x = W-pad;   if (b.vx > 0) b.vx *= -0.5; }
-      if (b.y < pad)        { b.y = pad;     if (b.vy < 0) b.vy *= -0.5; }
-      else if (b.y > H-pad) { b.y = H-pad;   if (b.vy > 0) b.vy *= -0.5; }
-      b.spd = sp;
+      if (b.x < 0) b.x += W; else if (b.x >= W) b.x -= W;
+      if (b.y < 0) b.y += H; else if (b.y >= H) b.y -= H;
     }
   }
 
