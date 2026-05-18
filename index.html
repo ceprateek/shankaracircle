@@ -415,12 +415,12 @@
         }
       }
 
-      // firm edge containment — keep the flock off the borders (no pile-ups)
-      const m = S * 0.15, eF = maxF * 3.0;
-      if (b.x < m)       fx += eF * (1 - b.x / m);
-      if (b.x > W - m)   fx -= eF * (1 - (W - b.x) / m);
-      if (b.y < m)       fy += eF * (1 - b.y / m);
-      if (b.y > H - m)   fy -= eF * (1 - (H - b.y) / m);
+      // firm edge containment — quadratic ramp, starts early, strong near wall
+      const m = S * 0.18, eF = maxF * 3.4;
+      if (b.x < m)          { const e = 1 - b.x / m;         fx += eF * e * e; }
+      else if (b.x > W - m) { const e = 1 - (W - b.x) / m;   fx -= eF * e * e; }
+      if (b.y < m)          { const e = 1 - b.y / m;         fy += eF * e * e; }
+      else if (b.y > H - m) { const e = 1 - (H - b.y) / m;   fy -= eF * e * e; }
 
       // wander — breaks up uniform drift so they don't march into a wall together
       b.ph += 0.02;
@@ -434,6 +434,11 @@
       if (sp > hi) { b.vx = b.vx/sp*hi; b.vy = b.vy/sp*hi; sp = hi; }
       else if (sp < lo && sp > 0) { b.vx = b.vx/sp*lo; b.vy = b.vy/sp*lo; sp = lo; }
       b.x += b.vx * dt; b.y += b.vy * dt;
+      const pad = 5;                                // hard wall — kills corner pile-ups
+      if (b.x < pad)        { b.x = pad;     if (b.vx < 0) b.vx *= -0.5; }
+      else if (b.x > W-pad) { b.x = W-pad;   if (b.vx > 0) b.vx *= -0.5; }
+      if (b.y < pad)        { b.y = pad;     if (b.vy < 0) b.vy *= -0.5; }
+      else if (b.y > H-pad) { b.y = H-pad;   if (b.vy > 0) b.vy *= -0.5; }
       b.spd = sp;
     }
   }
