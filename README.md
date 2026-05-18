@@ -45,10 +45,11 @@ No redeploy needed to tune the flock — open the panel in the live site:
 - Move the cursor — the flock flees it like a hawk · **click** to scatter
 - Cursor & chrome auto-hide after 4 s idle (screensaver / kiosk friendly)
 
-The shipped defaults (slow, cohesive: speed `0.85`, cohesion `1.35`,
-separation `1.0`, **4000 birds**) give a dense starling-murmuration look; the
-Birds slider ranges 2000–10000. The renderer batches birds into 3 depth layers
-(3 draw calls/frame) and caps neighbour sampling, so it stays fast at scale.
+The shipped defaults — speed `1.0`, cohesion `0.25`, alignment `1.0`,
+separation `3.0`, **5000 birds** — give a loose, widely-spaced but
+directionally-aligned drift. The Birds slider ranges 2000–10000 and Separation
+0–5. The renderer batches birds into 3 depth layers (3 draw calls/frame) and
+caps neighbour sampling, so it stays fast at scale.
 
 ## Deploy to Vercel
 

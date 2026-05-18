@@ -104,24 +104,24 @@
       <input type="range" id="s-time" min="0" max="1439" step="1" value="720">
     </div>
     <div class="row">
-      <label>Birds <span id="v-count">4000</span></label>
-      <input type="range" id="s-count" min="2000" max="10000" step="50" value="4000">
+      <label>Birds <span id="v-count">5000</span></label>
+      <input type="range" id="s-count" min="2000" max="10000" step="50" value="5000">
     </div>
     <div class="row">
-      <label>Cohesion <span id="v-coh">1.35</span></label>
-      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="1.35">
+      <label>Cohesion <span id="v-coh">0.25</span></label>
+      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="0.25">
     </div>
     <div class="row">
       <label>Alignment <span id="v-ali">1.0</span></label>
       <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.0">
     </div>
     <div class="row">
-      <label>Separation <span id="v-sep">1.0</span></label>
-      <input type="range" id="s-sep" min="0" max="3" step="0.05" value="1.0">
+      <label>Separation <span id="v-sep">3.0</span></label>
+      <input type="range" id="s-sep" min="0" max="5" step="0.05" value="3.0">
     </div>
     <div class="row">
-      <label>Speed <span id="v-spd">0.85</span></label>
-      <input type="range" id="s-spd" min="0.3" max="2" step="0.05" value="0.85">
+      <label>Speed <span id="v-spd">1.0</span></label>
+      <input type="range" id="s-spd" min="0.3" max="2" step="0.05" value="1.0">
     </div>
     <div class="acts">
       <button id="b-pause">Pause</button>
@@ -317,7 +317,7 @@
   }
 
   // ---------- flock ----------
-  const cfg = { count: 4000, coh: 1.35, ali: 1.0, sep: 1.0, spd: 0.85 };
+  const cfg = { count: 5000, coh: 0.25, ali: 1.0, sep: 3.0, spd: 1.0 };
   let boids = [];
 
   function makeBoid() {
