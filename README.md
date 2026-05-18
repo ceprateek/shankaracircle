@@ -48,8 +48,10 @@ No redeploy needed to tune the flock — open the panel in the live site:
 The shipped defaults — speed `1.0`, cohesion `0.25`, alignment `1.0`,
 separation `3.0`, **5000 birds** — give a loose, widely-spaced but
 directionally-aligned drift. The Birds slider ranges 2000–10000 and Separation
-0–5. The renderer batches birds into 3 depth layers (3 draw calls/frame) and
-caps neighbour sampling, so it stays fast at scale.
+0–5. **The actual flock size auto-scales to the viewport** (≈5000 on a desktop,
+~1100 on a phone) so it never overcrowds a small screen — the panel shows the
+live rendered count. The renderer batches birds into 3 depth layers (3 draw
+calls/frame) and caps neighbour sampling, so it stays fast at scale.
 
 ## Deploy to Vercel
 

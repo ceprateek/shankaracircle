@@ -152,6 +152,7 @@
     fl.setTransform(DPR, 0, 0, DPR, 0, 0);
     fl.clearRect(0, 0, W, H);
     buildStars();
+    if (boids.length) syncCount();
   }
   window.addEventListener("resize", resize);
 
@@ -330,16 +331,31 @@
       s: 0.75 + Math.random() * 0.55,              // per-bird size variance
     };
   }
-  function reseed(n) {
+  // actual flock size scales with viewport — far fewer on a phone than a desktop
+  function targetCount() {
+    const f = Math.min(1, (W * H) / 1440000);     // ~1600×900 ⇒ full count
+    return Math.max(400, Math.round(cfg.count * f));
+  }
+  function syncCount() {
+    const tc = targetCount();
+    while (boids.length < tc) boids.push(makeBoid());
+    if (boids.length > tc) boids.length = tc;
+    const vc = document.getElementById("v-count");
+    if (vc) vc.textContent = tc;
+  }
+  function reseed() {
     boids = [];
-    for (let i = 0; i < n; i++) boids.push(makeBoid());
+    const tc = targetCount();
+    for (let i = 0; i < tc; i++) boids.push(makeBoid());
+    const vc = document.getElementById("v-count");
+    if (vc) vc.textContent = tc;
   }
 
   function step(P, dt) {
     const S = Math.min(W, H);
     // smaller perception → fast at 1000s of birds + murmuration texture
     const per  = S * 0.055;
-    const sepR = S * 0.013;
+    const sepR = S * 0.024;                         // wider personal space (birds are bigger now)
     const per2 = per * per, sep2 = sepR * sepR;
     const NMAX = 20;                                // cap neighbours sampled / bird
     // px per frame @60fps; dt passed in is already frame-normalised (no extra ×60)
@@ -398,17 +414,17 @@
         }
       }
 
-      // soft edge steering
-      const m = S * 0.10;
-      if (b.x < m)       fx += maxF * 1.4 * (1 - b.x / m);
-      if (b.x > W - m)   fx -= maxF * 1.4 * (1 - (W - b.x) / m);
-      if (b.y < m)       fy += maxF * 1.4 * (1 - b.y / m);
-      if (b.y > H - m)   fy -= maxF * 1.4 * (1 - (H - b.y) / m);
+      // firm edge containment — keep the flock off the borders (no pile-ups)
+      const m = S * 0.15, eF = maxF * 3.0;
+      if (b.x < m)       fx += eF * (1 - b.x / m);
+      if (b.x > W - m)   fx -= eF * (1 - (W - b.x) / m);
+      if (b.y < m)       fy += eF * (1 - b.y / m);
+      if (b.y > H - m)   fy -= eF * (1 - (H - b.y) / m);
 
-      // gentle wander
+      // wander — breaks up uniform drift so they don't march into a wall together
       b.ph += 0.02;
-      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxF * 0.10;
-      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxF * 0.10;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxF * 0.16;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxF * 0.16;
 
       b.vx += fx * dt; b.vy += fy * dt;
       const zf = 0.72 + 0.5 * b.z;                  // near birds fly faster
@@ -511,11 +527,7 @@
   const bind = (id, key, vid, fmt) => $(id).addEventListener("input", e => {
     cfg[key] = +e.target.value;
     $(vid).textContent = fmt ? fmt(cfg[key]) : cfg[key];
-    if (key === "count") {
-      const d = cfg.count - boids.length;
-      if (d > 0) for (let i = 0; i < d; i++) boids.push(makeBoid());
-      else boids.length = cfg.count;
-    }
+    if (key === "count") syncCount();
   });
   bind("s-count", "count", "v-count");
   bind("s-coh", "coh", "v-coh", v => v.toFixed(2));
@@ -526,7 +538,7 @@
   $("b-pause").addEventListener("click", () => {
     paused = !paused; $("b-pause").textContent = paused ? "Play" : "Pause";
   });
-  $("b-reset").addEventListener("click", () => reseed(cfg.count));
+  $("b-reset").addEventListener("click", () => reseed());
   function fullscreen() {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
@@ -536,7 +548,7 @@
   addEventListener("keydown", e => {
     if (e.key === "h" || e.key === "H") togglePanel();
     else if (e.code === "Space") { e.preventDefault(); $("b-pause").click(); }
-    else if (e.key === "r" || e.key === "R") reseed(cfg.count);
+    else if (e.key === "r" || e.key === "R") reseed();
     else if (e.key === "f" || e.key === "F") fullscreen();
   });
 
@@ -580,9 +592,9 @@
   }
 
   resize();
-  reseed(cfg.count);
+  reseed();
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    cfg.spd = 0.6; cfg.count = 2000; reseed(cfg.count);
+    cfg.spd = 0.6; cfg.count = 2000; reseed();
     $("s-count").value = 2000; $("v-count").textContent = 2000;
     $("s-spd").value = 0.6;    $("v-spd").textContent = "0.60";
   }
