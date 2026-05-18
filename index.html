@@ -357,10 +357,12 @@
     const S = Math.min(W, H);
     // smaller perception → fast at 1000s of birds + murmuration texture
     // absolute px floors so birds keep real spacing even on a tiny phone screen
-    const per  = Math.max(S * 0.06, 40);            // > sepR, always
+    // perception MUST be several × sepR or the flock is just a uniform
+    // repulsive gas with no large-scale correlation (no waves / bands).
+    const per  = Math.max(S * 0.20, 120);           // ≈5× sepR → murmuration field
     const sepR = Math.max(S * 0.030, 24);           // clears ≈11px body + gap
     const per2 = per * per, sep2 = sepR * sepR;
-    const NMAX = 26;                                // cap neighbours sampled / bird
+    const NMAX = 40;                                // cap neighbours sampled / bird
     // px per frame @60fps; dt passed in is already frame-normalised (no extra ×60)
     const maxSpd = (0.65 + 0.8 * cfg.spd) * (S / 900);
     const minSpd = maxSpd * 0.6;
