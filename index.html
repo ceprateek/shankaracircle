@@ -447,6 +447,17 @@
         }
       }
 
+      // predator — strong panic flee, dominates the flocking forces
+      if (predator.on) {
+        const dx = b.x - predator.x, dy = b.y - predator.y, d2 = dx*dx + dy*dy;
+        const pR = S * 0.34, pR2 = pR * pR;
+        if (d2 < pR2 && d2 > 1) {
+          const d = Math.sqrt(d2), pen = 1 - d / pR;
+          const s = maxSpd * (3.0 + 9.0 * pen);
+          fx += (dx/d) * s; fy += (dy/d) * s;
+        }
+      }
+
       // gentle wander breaks lockstep without destroying the flow
       b.ph += 0.02;
       fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.05;
@@ -513,10 +524,63 @@
       fl.beginPath(); fl.arc(ripple.x, ripple.y, ripple.r, 0, 7); fl.stroke();
       ripple.r += 9; ripple.a *= 0.93;
     }
+
+    // predator — a bold raptor silhouette, oriented along its flight line
+    if (predator.on) {
+      const S = Math.min(W, H);
+      const sp = Math.hypot(predator.vx, predator.vy) || 1;
+      const ca = predator.vx / sp, sa = predator.vy / sp;
+      const L = Math.max(18, S * 0.040), Wd = L * 0.62, hx = -0.46 * L;
+      const x = predator.x, y = predator.y;
+      const col = mix(P.bird, [8, 6, 12], 0.72);
+      const halo = fl.createRadialGradient(x, y, 0, x, y, L * 2.4);
+      halo.addColorStop(0, rgb(col, 0.30));
+      halo.addColorStop(1, rgb(col, 0));
+      fl.fillStyle = halo;
+      fl.beginPath(); fl.arc(x, y, L * 2.4, 0, 7); fl.fill();
+      fl.fillStyle = rgb(col, 0.96);
+      fl.beginPath();
+      fl.moveTo(x + ca * L, y + sa * L);
+      fl.lineTo(x + ca * hx - sa * Wd, y + sa * hx + ca * Wd);
+      fl.lineTo(x + ca * hx + sa * Wd, y + sa * hx - ca * Wd);
+      fl.closePath(); fl.fill();
+    }
   }
 
   // sun / moon disc — published by drawSky, used by step as an obstacle
   const orb = { x: 0, y: 0, R: 0, on: false };
+
+  // predator — sweeps the sky in a straight line; the flock flees it.
+  // one pass every PRED_INTERVAL; first pass shortly after load.
+  const PRED_INTERVAL = 600000;                  // 10 min between passes
+  const predator = { on: false, x: 0, y: 0, vx: 0, vy: 0, spd: 0 };
+  let predNext = performance.now() + 20000;      // first pass ~20s after load
+
+  function spawnPredator() {
+    const S = Math.min(W, H);
+    predator.spd = S * 0.26;                      // px/sec — faster than the flock
+    const mgn = S * 0.18;
+    const fromLeft = Math.random() < 0.5;
+    predator.x = fromLeft ? -mgn : W + mgn;
+    predator.y = H * (0.12 + Math.random() * 0.42);   // upper sky band
+    const vy = (Math.random() - 0.5) * predator.spd * 0.30;
+    predator.vx = (fromLeft ? 1 : -1) * predator.spd;
+    predator.vy = vy;
+    predator.on = true;
+  }
+
+  function updatePredator(now, dt) {
+    if (!predator.on && now >= predNext) spawnPredator();
+    if (!predator.on) return;
+    predator.x += predator.vx * dt;
+    predator.y += predator.vy * dt;
+    const mgn = Math.min(W, H) * 0.20;
+    if (predator.x < -mgn || predator.x > W + mgn ||
+        predator.y < -mgn || predator.y > H + mgn) {
+      predator.on = false;
+      predNext = now + PRED_INTERVAL;
+    }
+  }
 
   // ---------- interaction ----------
   const hawk = { x: 0, y: 0, on: false };
@@ -625,6 +689,8 @@
     vTime.textContent = fmtClock(live ? t : manualMin / 60);
 
     drawSky(t, P, now);
+    if (!paused) updatePredator(now, dt);
+    if (predator.on) scatter = Math.max(scatter, 0.85);   // long panic trails
     if (!paused) step(P, dt * 60);
     drawFlock(P);
 
