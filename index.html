@@ -429,10 +429,10 @@
         }
       }
 
-      // edge containment — wide, gentle LINEAR ramp so the turn is spread
-      // across a deep band instead of a force-wall the flock dams against
-      // (a hard ramp compresses the whole flock into an overlapping rim).
-      const m = S * 0.24, eF = maxF * 1.6;
+      // edge containment — LINEAR ramp (not quadratic: a quadratic
+      // force-wall compresses the flock into an overlapping rim) but
+      // strong enough that the flock can't drain onto an edge.
+      const m = S * 0.20, eF = maxF * 2.6;
       if (b.x < m)          { fx += eF * (1 - b.x / m); }
       else if (b.x > W - m) { fx -= eF * (1 - (W - b.x) / m); }
       if (b.y < m)          { fy += eF * (1 - b.y / m); }
@@ -450,11 +450,11 @@
       if (sp > hi) { b.vx = b.vx/sp*hi; b.vy = b.vy/sp*hi; sp = hi; }
       else if (sp < lo && sp > 0) { b.vx = b.vx/sp*lo; b.vy = b.vy/sp*lo; sp = lo; }
       b.x += b.vx * dt; b.y += b.vy * dt;
-      const pad = 5;                                // soft stop — no bounce-back
-      if (b.x < pad)        { b.x = pad;     if (b.vx < 0) b.vx = 0; }
-      else if (b.x > W-pad) { b.x = W-pad;   if (b.vx > 0) b.vx = 0; }
-      if (b.y < pad)        { b.y = pad;     if (b.vy < 0) b.vy = 0; }
-      else if (b.y > H-pad) { b.y = H-pad;   if (b.vy > 0) b.vy = 0; }
+      const pad = 5;                                // reflect inward — never absorb
+      if (b.x < pad)        { b.x = pad;     if (b.vx < 0) b.vx *= -0.5; }
+      else if (b.x > W-pad) { b.x = W-pad;   if (b.vx > 0) b.vx *= -0.5; }
+      if (b.y < pad)        { b.y = pad;     if (b.vy < 0) b.vy *= -0.5; }
+      else if (b.y > H-pad) { b.y = H-pad;   if (b.vy > 0) b.vy *= -0.5; }
       b.spd = sp;
     }
   }
