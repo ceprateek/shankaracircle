@@ -112,8 +112,8 @@
       <input type="range" id="s-coh" min="0" max="2" step="0.05" value="0.25">
     </div>
     <div class="row">
-      <label>Alignment <span id="v-ali">1.0</span></label>
-      <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.0">
+      <label>Alignment <span id="v-ali">0.70</span></label>
+      <input type="range" id="s-ali" min="0" max="2" step="0.05" value="0.7">
     </div>
     <div class="row">
       <label>Separation <span id="v-sep">3.0</span></label>
@@ -318,7 +318,7 @@
   }
 
   // ---------- flock ----------
-  const cfg = { count: 5000, coh: 0.25, ali: 1.0, sep: 3.0, spd: 1.0 };
+  const cfg = { count: 5000, coh: 0.25, ali: 0.7, sep: 3.0, spd: 1.0 };
   let boids = [];
 
   function makeBoid() {
@@ -333,8 +333,10 @@
   }
   // actual flock size scales with viewport — far fewer on a phone than a desktop
   function targetCount() {
-    const f = Math.min(1, (W * H) / 1440000);     // ~1600×900 ⇒ full count
-    return Math.max(400, Math.round(cfg.count * f));
+    // one bird per ~620 px² → consistent clean spacing on every screen
+    // (phone gets ~half what it used to). Birds slider is a ceiling, not
+    // a fixed target, so density never exceeds the clean-spacing budget.
+    return Math.max(300, Math.min(cfg.count, Math.round((W * H) / 620)));
   }
   function syncCount() {
     const tc = targetCount();
@@ -355,8 +357,8 @@
     const S = Math.min(W, H);
     // smaller perception → fast at 1000s of birds + murmuration texture
     // absolute px floors so birds keep real spacing even on a tiny phone screen
-    const per  = Math.max(S * 0.06, 34);            // > sepR, always
-    const sepR = Math.max(S * 0.030, 20);           // > bird body length (≈11px)
+    const per  = Math.max(S * 0.06, 40);            // > sepR, always
+    const sepR = Math.max(S * 0.030, 24);           // clears ≈11px body + gap
     const per2 = per * per, sep2 = sepR * sepR;
     const NMAX = 26;                                // cap neighbours sampled / bird
     // px per frame @60fps; dt passed in is already frame-normalised (no extra ×60)
@@ -391,7 +393,7 @@
           // cell eats the budget and the overlapping bird is never seen.
           if (d2 < sep2 && d2 > 0) {
             const d = Math.sqrt(d2);
-            const w = (sepR - d) / (d * d);          // → blows up as d→0, 0 at sepR
+            const w = (sepR - d) / d;                // strong at body scale, 0 at sepR
             sx -= dx * w; sy -= dy * w;
           }
           if (d2 > per2 || n >= NMAX) continue;       // perception cap: coh/ali only
@@ -412,7 +414,7 @@
       // the tug-of-war vs cohesion+alignment without exploding into jitter.
       if (sx || sy) {
         let fsx = sx * maxF * cfg.sep, fsy = sy * maxF * cfg.sep;
-        const sm = Math.hypot(fsx, fsy), cap = maxF * cfg.sep * 4;
+        const sm = Math.hypot(fsx, fsy), cap = maxF * cfg.sep * 5;
         if (sm > cap) { const k = cap / sm; fsx *= k; fsy *= k; }
         fx += fsx; fy += fsy;
       }
