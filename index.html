@@ -104,24 +104,24 @@
       <input type="range" id="s-time" min="0" max="1439" step="1" value="720">
     </div>
     <div class="row">
-      <label>Birds <span id="v-count">160</span></label>
-      <input type="range" id="s-count" min="24" max="420" step="2" value="160">
+      <label>Birds <span id="v-count">220</span></label>
+      <input type="range" id="s-count" min="24" max="420" step="2" value="220">
     </div>
     <div class="row">
-      <label>Cohesion <span id="v-coh">0.9</span></label>
-      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="0.9">
+      <label>Cohesion <span id="v-coh">1.35</span></label>
+      <input type="range" id="s-coh" min="0" max="2" step="0.05" value="1.35">
     </div>
     <div class="row">
       <label>Alignment <span id="v-ali">1.0</span></label>
       <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.0">
     </div>
     <div class="row">
-      <label>Separation <span id="v-sep">1.3</span></label>
-      <input type="range" id="s-sep" min="0" max="3" step="0.05" value="1.3">
+      <label>Separation <span id="v-sep">1.0</span></label>
+      <input type="range" id="s-sep" min="0" max="3" step="0.05" value="1.0">
     </div>
     <div class="row">
-      <label>Speed <span id="v-spd">1.0</span></label>
-      <input type="range" id="s-spd" min="0.4" max="2" step="0.05" value="1.0">
+      <label>Speed <span id="v-spd">0.85</span></label>
+      <input type="range" id="s-spd" min="0.3" max="2" step="0.05" value="0.85">
     </div>
     <div class="acts">
       <button id="b-pause">Pause</button>
@@ -317,7 +317,7 @@
   }
 
   // ---------- flock ----------
-  const cfg = { count: 160, coh: 0.9, ali: 1.0, sep: 1.3, spd: 1.0 };
+  const cfg = { count: 220, coh: 1.35, ali: 1.0, sep: 1.0, spd: 0.85 };
   let boids = [];
 
   function makeBoid() {
@@ -336,12 +336,13 @@
 
   function step(P, dt) {
     const S = Math.min(W, H);
-    const per  = S * 0.085;                         // perception radius
-    const sepR = S * 0.030;
+    const per  = S * 0.135;                         // perception radius — wider = tighter flocks
+    const sepR = S * 0.020;                         // personal space — smaller = closer together
     const per2 = per * per, sep2 = sepR * sepR;
-    const maxSpd = (1.7 + 1.3 * cfg.spd) * (S / 900) * 60;
-    const minSpd = maxSpd * 0.55;
-    const maxF   = maxSpd * 0.045;
+    // px per frame @60fps; dt passed in is already frame-normalised (no extra ×60)
+    const maxSpd = (0.65 + 0.8 * cfg.spd) * (S / 900);
+    const minSpd = maxSpd * 0.6;
+    const maxF   = maxSpd * 0.055;
 
     // spatial hash
     const cell = per, grid = new Map();
@@ -399,8 +400,8 @@
 
       // gentle wander
       b.ph += 0.02;
-      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxF * 0.16;
-      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxF * 0.16;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxF * 0.10;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxF * 0.10;
 
       b.vx += fx * dt; b.vy += fy * dt;
       const zf = 0.72 + 0.5 * b.z;                  // near birds fly faster
