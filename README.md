@@ -46,7 +46,8 @@ No redeploy needed to tune the flock — open the panel in the live site:
 - Cursor & chrome auto-hide after 4 s idle (screensaver / kiosk friendly)
 
 The shipped defaults (slow, cohesive: speed `0.85`, cohesion `1.35`,
-separation `1.0`, 220 birds) are the calm look; tweak live to taste.
+separation `1.0`, **880 birds**) are the calm, dense-murmuration look; tweak
+live to taste (the Birds slider goes up to 1600).
 
 ## Deploy to Vercel
 
