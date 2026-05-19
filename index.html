@@ -270,8 +270,6 @@
       bodyA = { x: bx, y: by, R: Math.min(W, H) * 0.040,
                 col: P.glow, edge: 1 };
     }
-    orb.x = bodyA.x; orb.y = bodyA.y; orb.R = bodyA.R;
-    orb.on = bodyA.edge > 0.01;
     if (bodyA.edge > 0.01) {
       const { x, y, R, col, edge } = bodyA;
       const halo = sky.createRadialGradient(x, y, 0, x, y, R * 7);
@@ -436,17 +434,6 @@
         }
       }
 
-      // sun / moon — soft repulsion so the flock arcs around the disc
-      if (orb.on) {
-        const dx = b.x - orb.x, dy = b.y - orb.y, d2 = dx*dx + dy*dy;
-        const aR = orb.R * 1.7, aR2 = aR * aR;
-        if (d2 < aR2) {
-          const d = Math.sqrt(d2) || 0.001, pen = 1 - d / aR;
-          const s = maxSpd * (1.2 + 5.0 * pen);
-          fx += (dx/d) * s; fy += (dy/d) * s;
-        }
-      }
-
       // predator — strong panic flee, dominates the flocking forces
       if (predator.on) {
         const dx = b.x - predator.x, dy = b.y - predator.y, d2 = dx*dx + dy*dy;
@@ -477,17 +464,6 @@
       b.x += b.vx * dt; b.y += b.vy * dt;
       if (b.x < 0) b.x += W; else if (b.x >= W) b.x -= W;
       if (b.y < 0) b.y += H; else if (b.y >= H) b.y -= H;
-      // hard guarantee: never render on the bright disc itself
-      if (orb.on) {
-        const dx = b.x - orb.x, dy = b.y - orb.y;
-        const dd = Math.hypot(dx, dy), rr = orb.R * 1.15;
-        if (dd < rr && dd > 0) {
-          const nx = dx/dd, ny = dy/dd;
-          b.x = orb.x + nx * rr; b.y = orb.y + ny * rr;
-          const vn = b.vx*nx + b.vy*ny;          // remove inward velocity
-          if (vn < 0) { b.vx -= vn*nx; b.vy -= vn*ny; }
-        }
-      }
     }
   }
 
@@ -564,8 +540,6 @@
     }
   }
 
-  // sun / moon disc — published by drawSky, used by step as an obstacle
-  const orb = { x: 0, y: 0, R: 0, on: false };
 
   // predator — hunts the densest cluster with a zig-zag (serpentine)
   // approach, dives through it, then peels off and exits the far side.
