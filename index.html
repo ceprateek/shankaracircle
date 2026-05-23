@@ -413,7 +413,7 @@
     const cohK = (maxSpd * 0.10 / cohR) * cfg.coh;   // weak spring to centre
     const aliK = 0.045 * cfg.ali;                    // velocity matching — moderate, leaves room for per-bird turn to create variety
     const sepK = maxSpd * 0.012 * cfg.sep;           // gentle wide separation
-    const coreK= maxSpd * 3.0;                       // short-range hard core
+    const coreK= maxSpd * 1.6;                       // short-range core — softer than before, quadratic ramp for smooth merge engagement
 
     // toroidal spatial hash — wrapped cell indices, no edge cells
     const cell = cohR;
@@ -435,7 +435,7 @@
     // pass 1 — forces from the start-of-frame snapshot
     for (const b of boids) {
       let cx = 0, cy = 0, n = 0, avx = 0, avy = 0, an = 0,
-          sx = 0, sy = 0, kx = 0, ky = 0;
+          sx = 0, sy = 0, kx = 0, ky = 0, sn = 0;
       const gx = wrapc((b.x / cell) | 0, ncx), gy = wrapc((b.y / cell) | 0, ncy);
       const seen = new Set();
       for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) {
@@ -454,10 +454,15 @@
           const d = Math.sqrt(d2);
           cx += dx; cy += dy; n++;                              // cohesion
           if (d2 < aliR2) { avx += o.vx; avy += o.vy; an++; }    // alignment
-          if (d2 < sepR2) { const w = (sepR - d) / (d * sepR);   // separation
-            sx -= dx * w; sy -= dy * w; }
-          if (d2 < closeR2) { const u = (closeR - d) / (d * closeR);
-            kx -= dx * u; ky -= dy * u; }                        // hard core
+          if (d2 < sepR2) {                                      // separation + crowd count
+            const w = (sepR - d) / (d * sepR);
+            sx -= dx * w; sy -= dy * w; sn++;
+          }
+          if (d2 < closeR2) {                                    // hard core — quadratic ramp, smooth merge engagement
+            const t = (closeR - d) / closeR;
+            const u = (t * t) / d;
+            kx -= dx * u; ky -= dy * u;
+          }
         }
       }
 
@@ -492,14 +497,25 @@
       fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.032;
       fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.032;
 
-      b.fx = fx; b.fy = fy;
+      b.fx = fx; b.fy = fy; b.sn = sn;
     }
 
-    // pass 2 — integrate, constant drive, clamp, toroidal wrap
+    // pass 2 — integrate, density-scaled drive, drag, clamp, turn, wrap
     for (const b of boids) {
       b.vx += b.fx * dt; b.vy += b.fy * dt;
+      // gentle drag — lets opposing velocities settle onto a shared heading
+      // during merges instead of oscillating around the average
+      const drag = 1 - 0.005 * dt;
+      b.vx *= drag; b.vy *= drag;
       let sp = Math.hypot(b.vx, b.vy);
-      if (sp > 0) { b.vx += (b.vx/sp) * DR * dt; b.vy += (b.vy/sp) * DR * dt; }
+      if (sp > 0) {
+        // forward drive scales down only on density spikes above normal flock
+        // density — slows the transient when sub-flocks first collide, but
+        // doesn't persistently brake birds once they've merged into a group
+        const driveScale = b.sn > 12 ? 12 / b.sn : 1;
+        const d = DR * driveScale * dt;
+        b.vx += (b.vx/sp) * d; b.vy += (b.vy/sp) * d;
+      }
       const hi = maxSpd * (0.78 + 0.42 * b.z);       // near birds fly faster
       sp = Math.hypot(b.vx, b.vy);
       if (sp > hi) { const k = hi / sp; b.vx *= k; b.vy *= k; }
