@@ -509,15 +509,14 @@
       b.vx *= drag; b.vy *= drag;
       let sp = Math.hypot(b.vx, b.vy);
       if (sp > 0) {
-        // forward drive scales down with local crowd density — when many
-        // close neighbours, birds brake so the merge has time to negotiate
-        const driveScale = b.sn > 6 ? 6 / b.sn : 1;
+        // forward drive scales down only on density spikes above normal flock
+        // density — slows the transient when sub-flocks first collide, but
+        // doesn't persistently brake birds once they've merged into a group
+        const driveScale = b.sn > 12 ? 12 / b.sn : 1;
         const d = DR * driveScale * dt;
         b.vx += (b.vx/sp) * d; b.vy += (b.vy/sp) * d;
       }
-      // speed clamp also relaxes in dense pockets so birds visibly slow
-      const crowd = b.sn > 6 ? 6 / b.sn : 1;
-      const hi = maxSpd * (0.78 + 0.42 * b.z) * (0.55 + 0.45 * crowd);
+      const hi = maxSpd * (0.78 + 0.42 * b.z);       // near birds fly faster
       sp = Math.hypot(b.vx, b.vy);
       if (sp > hi) { const k = hi / sp; b.vx *= k; b.vy *= k; }
       // per-bird heading drift — local sub-flock formation, emergent eddies
