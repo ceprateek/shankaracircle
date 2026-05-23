@@ -321,6 +321,11 @@
   const cfg = { count: 6000, coh: 2.0, ali: 1.0, sep: 1.0, spd: 1.0 };
   let boids = [];
 
+  // shared global wind — slow drifting direction every bird leans into,
+  // so the whole sky has one heading that meanders over minutes.
+  let windAng = Math.random() * Math.PI * 2;
+  let windAngVel = 0;
+
   function makeBoid() {
     const a = Math.random() * Math.PI * 2;
     const z = Math.random();                       // depth 0 far .. 1 near
@@ -359,17 +364,17 @@
     // ported from the reference boids: weak proportional forces + constant
     // forward drive + hard short-range core + toroidal wrap. radii scale
     // with the screen so the look is consistent on phone and desktop.
-    const cohR   = Math.max(S * 0.060, 30);         // perceive / cohere
-    const aliR   = cohR * 0.70;                     // velocity matching
-    const sepR   = cohR * 0.55;                     // gentle wide separation
-    const closeR = Math.max(cohR * 0.22, 7);        // hard anti-overlap core
+    const cohR   = Math.max(S * 0.085, 42);         // perceive / cohere (wider — distant pockets feel each other)
+    const aliR   = cohR;                            // velocity matching (matches cohesion — birds align with the same neighbours they cohere with)
+    const sepR   = cohR * 0.40;                     // gentle wide separation
+    const closeR = Math.max(cohR * 0.16, 7);        // hard anti-overlap core
     const cohR2 = cohR*cohR, aliR2 = aliR*aliR,
           sepR2 = sepR*sepR, closeR2 = closeR*closeR;
 
     const maxSpd = (1.10 + 1.2 * cfg.spd) * (S / 900);
     const DR   = maxSpd * 0.07;                      // constant forward drive
     const cohK = (maxSpd * 0.10 / cohR) * cfg.coh;   // weak spring to centre
-    const aliK = 0.025 * cfg.ali;                    // velocity matching
+    const aliK = 0.095 * cfg.ali;                    // velocity matching — biggest lever for shared heading
     const sepK = maxSpd * 0.012 * cfg.sep;           // gentle wide separation
     const coreK= maxSpd * 3.0;                       // short-range hard core
 
@@ -389,6 +394,15 @@
     const mh = hawk.on ? hawk : null;
     const hawkR = S * 0.16 * (1 + scatter * 2), hawkR2 = hawkR * hawkR;
     const halfW = W / 2, halfH = H / 2;
+
+    // global wind — direction does a slow random walk, then we damp the
+    // angular velocity so it meanders rather than spinning. tiny but shared
+    // by every bird, so it sets the sky's overall heading.
+    windAngVel += (Math.random() - 0.5) * 0.0009;
+    windAngVel *= 0.985;
+    windAng += windAngVel;
+    const windFx = Math.cos(windAng) * maxSpd * 0.028;
+    const windFy = Math.sin(windAng) * maxSpd * 0.028;
 
     // pass 1 — forces from the start-of-frame snapshot
     for (const b of boids) {
@@ -445,10 +459,12 @@
         }
       }
 
-      // gentle wander breaks lockstep without destroying the flow
+      // shared global wind + a small per-bird wander. wind sets the sky's
+      // direction, wander just breaks perfect lockstep at the individual level.
+      fx += windFx; fy += windFy;
       b.ph += 0.02;
-      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.05;
-      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.05;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.022;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.022;
 
       b.fx = fx; b.fy = fy;
     }
