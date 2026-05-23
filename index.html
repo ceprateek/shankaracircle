@@ -370,6 +370,7 @@
       vx: Math.cos(a), vy: Math.sin(a),
       z, ph: Math.random() * Math.PI * 2,
       s: 0.75 + Math.random() * 0.55,              // per-bird size variance
+      turn: (Math.random() - 0.5) * 0.010,         // per-bird heading drift — gives sub-flocks their own curl
     };
   }
   // actual flock size scales with viewport — far fewer on a phone than a desktop
@@ -400,17 +401,17 @@
     // ported from the reference boids: weak proportional forces + constant
     // forward drive + hard short-range core + toroidal wrap. radii scale
     // with the screen so the look is consistent on phone and desktop.
-    const cohR   = Math.max(S * 0.060, 30);         // perceive / cohere
-    const aliR   = cohR * 0.70;                     // velocity matching
-    const sepR   = cohR * 0.55;                     // gentle wide separation
-    const closeR = Math.max(cohR * 0.22, 7);        // hard anti-overlap core
+    const cohR   = Math.max(S * 0.065, 32);         // perceive / cohere — narrow local perception, ~10 neighbours
+    const aliR   = cohR * 0.65;                     // velocity matching — within most of the perception window
+    const sepR   = cohR * 0.50;                     // separation
+    const closeR = Math.max(cohR * 0.20, 7);        // hard anti-overlap core
     const cohR2 = cohR*cohR, aliR2 = aliR*aliR,
           sepR2 = sepR*sepR, closeR2 = closeR*closeR;
 
     const maxSpd = (1.10 + 1.2 * cfg.spd) * (S / 900);
     const DR   = maxSpd * 0.07;                      // constant forward drive
     const cohK = (maxSpd * 0.10 / cohR) * cfg.coh;   // weak spring to centre
-    const aliK = 0.025 * cfg.ali;                    // velocity matching
+    const aliK = 0.045 * cfg.ali;                    // velocity matching — moderate, leaves room for per-bird turn to create variety
     const sepK = maxSpd * 0.012 * cfg.sep;           // gentle wide separation
     const coreK= maxSpd * 3.0;                       // short-range hard core
 
@@ -486,10 +487,10 @@
         }
       }
 
-      // gentle wander breaks lockstep without destroying the flow
+      // per-bird wander — independent noise so birds don't move in lockstep
       b.ph += 0.02;
-      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.05;
-      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.05;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.032;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.032;
 
       b.fx = fx; b.fy = fy;
     }
@@ -502,6 +503,11 @@
       const hi = maxSpd * (0.78 + 0.42 * b.z);       // near birds fly faster
       sp = Math.hypot(b.vx, b.vy);
       if (sp > hi) { const k = hi / sp; b.vx *= k; b.vy *= k; }
+      // per-bird heading drift — local sub-flock formation, emergent eddies
+      const r = b.turn * dt, tc = Math.cos(r), ts = Math.sin(r);
+      const tvx = b.vx;
+      b.vx = tvx * tc - b.vy * ts;
+      b.vy = tvx * ts + b.vy * tc;
       b.x += b.vx * dt; b.y += b.vy * dt;
       if (b.x < 0) b.x += W; else if (b.x >= W) b.x -= W;
       if (b.y < 0) b.y += H; else if (b.y >= H) b.y -= H;
