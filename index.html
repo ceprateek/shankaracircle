@@ -364,17 +364,17 @@
     // ported from the reference boids: weak proportional forces + constant
     // forward drive + hard short-range core + toroidal wrap. radii scale
     // with the screen so the look is consistent on phone and desktop.
-    const cohR   = Math.max(S * 0.085, 42);         // perceive / cohere (wider — distant pockets feel each other)
-    const aliR   = cohR;                            // velocity matching (matches cohesion — birds align with the same neighbours they cohere with)
-    const sepR   = cohR * 0.40;                     // gentle wide separation
-    const closeR = Math.max(cohR * 0.16, 7);        // hard anti-overlap core
+    const cohR   = Math.max(S * 0.085, 42);         // perceive / cohere (wide — distant pockets feel each other)
+    const aliR   = cohR * 0.55;                     // velocity matching — LOCAL only, so direction ripples through the flock rather than locking globally
+    const sepR   = cohR * 0.45;                     // gentle wide separation
+    const closeR = Math.max(cohR * 0.18, 7);        // hard anti-overlap core
     const cohR2 = cohR*cohR, aliR2 = aliR*aliR,
           sepR2 = sepR*sepR, closeR2 = closeR*closeR;
 
     const maxSpd = (1.10 + 1.2 * cfg.spd) * (S / 900);
     const DR   = maxSpd * 0.07;                      // constant forward drive
     const cohK = (maxSpd * 0.10 / cohR) * cfg.coh;   // weak spring to centre
-    const aliK = 0.095 * cfg.ali;                    // velocity matching — biggest lever for shared heading
+    const aliK = 0.055 * cfg.ali;                    // velocity matching — strong enough for swarm feel, loose enough for internal eddies
     const sepK = maxSpd * 0.012 * cfg.sep;           // gentle wide separation
     const coreK= maxSpd * 3.0;                       // short-range hard core
 
@@ -401,8 +401,8 @@
     windAngVel += (Math.random() - 0.5) * 0.0009;
     windAngVel *= 0.985;
     windAng += windAngVel;
-    const windFx = Math.cos(windAng) * maxSpd * 0.028;
-    const windFy = Math.sin(windAng) * maxSpd * 0.028;
+    const windFx = Math.cos(windAng) * maxSpd * 0.018;
+    const windFy = Math.sin(windAng) * maxSpd * 0.018;
 
     // pass 1 — forces from the start-of-frame snapshot
     for (const b of boids) {
@@ -463,8 +463,8 @@
       // direction, wander just breaks perfect lockstep at the individual level.
       fx += windFx; fy += windFy;
       b.ph += 0.02;
-      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.022;
-      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.022;
+      fx += Math.cos(b.ph * 0.7 + b.z * 9) * maxSpd * 0.032;
+      fy += Math.sin(b.ph * 0.5 + b.z * 5) * maxSpd * 0.032;
 
       b.fx = fx; b.fy = fy;
     }
