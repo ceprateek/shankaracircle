@@ -149,20 +149,20 @@
       <input type="range" id="s-count" min="2000" max="10000" step="50" value="5000">
     </div>
     <div class="row">
-      <label>Cohesion <span id="v-coh">2.00</span></label>
-      <input type="range" id="s-coh" min="0" max="4" step="0.05" value="2.0">
+      <label>Cohesion <span id="v-coh">0.80</span></label>
+      <input type="range" id="s-coh" min="0" max="4" step="0.05" value="0.8">
     </div>
     <div class="row">
       <label>Alignment <span id="v-ali">1.00</span></label>
       <input type="range" id="s-ali" min="0" max="2" step="0.05" value="1.0">
     </div>
     <div class="row">
-      <label>Separation <span id="v-sep">1.00</span></label>
-      <input type="range" id="s-sep" min="0" max="5" step="0.05" value="1.0">
+      <label>Separation <span id="v-sep">1.50</span></label>
+      <input type="range" id="s-sep" min="0" max="5" step="0.05" value="1.5">
     </div>
     <div class="row">
-      <label>Speed <span id="v-spd">1.0</span></label>
-      <input type="range" id="s-spd" min="0.3" max="2" step="0.05" value="1.0">
+      <label>Speed <span id="v-spd">0.75</span></label>
+      <input type="range" id="s-spd" min="0.3" max="2" step="0.05" value="0.75">
     </div>
     <div class="acts">
       <button id="b-pause">Pause</button>
@@ -359,15 +359,17 @@
   }
 
   // ---------- flock ----------
-  const cfg = { count: 6000, coh: 2.0, ali: 1.0, sep: 1.0, spd: 1.0 };
+  const cfg = { count: 6000, coh: 0.8, ali: 1.0, sep: 1.5, spd: 0.75 };
   let boids = [];
 
   function makeBoid() {
     const a = Math.random() * Math.PI * 2;
     const z = Math.random();                       // depth 0 far .. 1 near
+    const cx = Math.cos(a), cy = Math.sin(a);
     return {
       x: Math.random() * W, y: Math.random() * H,
-      vx: Math.cos(a), vy: Math.sin(a),
+      vx: cx, vy: cy,
+      hx: cx, hy: cy,                              // stable render heading — frozen at low |v| so slow birds don't flip orientation
       z, ph: Math.random() * Math.PI * 2,
       s: 0.75 + Math.random() * 0.55,              // per-bird size variance
       turn: (Math.random() - 0.5) * 0.010,         // per-bird heading drift — gives sub-flocks their own curl
@@ -404,7 +406,7 @@
     const cohR   = Math.max(S * 0.065, 32);         // perceive / cohere — narrow local perception, ~10 neighbours
     const aliR   = cohR * 0.65;                     // velocity matching — within most of the perception window
     const sepR   = cohR * 0.50;                     // separation
-    const closeR = Math.max(cohR * 0.20, 7);        // hard anti-overlap core
+    const closeR = Math.max(cohR * 0.18, 7);        // hard anti-overlap core — engagement zone wide enough to keep birds from piling, narrow enough not to bubble
     const cohR2 = cohR*cohR, aliR2 = aliR*aliR,
           sepR2 = sepR*sepR, closeR2 = closeR*closeR;
 
@@ -413,7 +415,7 @@
     const cohK = (maxSpd * 0.10 / cohR) * cfg.coh;   // weak spring to centre
     const aliK = 0.045 * cfg.ali;                    // velocity matching — moderate, leaves room for per-bird turn to create variety
     const sepK = maxSpd * 0.012 * cfg.sep;           // gentle wide separation
-    const coreK= maxSpd * 1.6;                       // short-range core — softer than before, quadratic ramp for smooth merge engagement
+    const coreK= maxSpd * 1.3;                       // short-range core — partly restored so clusters don't implode, still gentler than the bubbly 1.6 baseline
 
     // toroidal spatial hash — wrapped cell indices, no edge cells
     const cell = cohR;
@@ -524,6 +526,16 @@
       const tvx = b.vx;
       b.vx = tvx * tc - b.vy * ts;
       b.vy = tvx * ts + b.vy * tc;
+      // stable rendering heading: smoothed toward velocity, frozen at near-zero
+      // speed so isolated/slow birds don't flip orientation between frames
+      const fsp = Math.hypot(b.vx, b.vy);
+      if (fsp > 0.05) {
+        const tx = b.vx / fsp, ty = b.vy / fsp;
+        b.hx = b.hx * 0.80 + tx * 0.20;
+        b.hy = b.hy * 0.80 + ty * 0.20;
+        const hm = Math.hypot(b.hx, b.hy);
+        if (hm > 0) { b.hx /= hm; b.hy /= hm; }
+      }
       b.x += b.vx * dt; b.y += b.vy * dt;
       if (b.x < 0) b.x += W; else if (b.x >= W) b.x -= W;
       if (b.y < 0) b.y += H; else if (b.y >= H) b.y -= H;
@@ -538,23 +550,47 @@
     fl.fillRect(0, 0, W, H);
     fl.globalCompositeOperation = "source-over";
 
-    // three depth layers, each one batched fill — cheap at thousands of birds
+    // three depth layers, batched per layer. far layer = small specks (chevron/
+    // crescent is unreadable at that size); mid + near = shallow swept-back
+    // crescents oriented along the stable heading, with a soft per-bird flap.
     const far  = mix(mix(P.bird, P.bot, 0.34), P.glow, night);
     const midC = mix(mix(P.bird, P.bot, 0.16), P.glow, night);
     const near = mix(P.bird, P.glow, night);
     const dim  = 0.55 + 0.45 * night;
     const cols = [ rgb(far, 0.5 * dim), rgb(midC, 0.78 * dim), rgb(near, dim) ];
-    const baseR = [ 1.4, 2.0, 2.8 ];                 // dot radius per depth layer
-    const paths = [ new Path2D(), new Path2D(), new Path2D() ];
+    const baseR     = 1.1;                           // far-layer dot radius (smaller — reads as speck, not bubble)
+    const baseChord = [ 0, 5.5, 7.5 ];               // wing-to-wing span per layer
+    const baseLW    = [ 0, 1.0, 1.4 ];               // stroke width per layer
+    const farPath = new Path2D();
+    const midPath = new Path2D();
+    const nearPath = new Path2D();
+    const paths = [ farPath, midPath, nearPath ];
 
     for (let i = 0; i < boids.length; i++) {
       const b = boids[i];
       const li = b.z < 0.34 ? 0 : b.z < 0.67 ? 1 : 2;
-      const r = baseR[li] * b.s, x = b.x, y = b.y;
-      const pth = paths[li];
-      pth.moveTo(x + r, y); pth.arc(x, y, r, 0, 7);  // moveTo: no connecting line
+      const x = b.x, y = b.y, s = b.s;
+      if (li === 0) {
+        const r = baseR * s;
+        farPath.moveTo(x + r, y); farPath.arc(x, y, r, 0, 7);
+      } else {
+        const flap = Math.sin(b.ph * 1.3);
+        const C = baseChord[li] * s * (0.94 + 0.06 * flap);    // gentle chord swell
+        const depth = C * (0.22 + 0.05 * flap);                 // gentle curvature swell
+        const ux = b.hx, uy = b.hy;                  // stable heading
+        const px = -uy, py = ux;                     // perpendicular = wing axis
+        const hC = C * 0.5;
+        const lx = x + px * hC, ly = y + py * hC;
+        const rx = x - px * hC, ry = y - py * hC;
+        const cx = x - ux * depth, cy = y - uy * depth;     // control point: behind bird
+        const p = paths[li];
+        p.moveTo(lx, ly); p.quadraticCurveTo(cx, cy, rx, ry);
+      }
     }
-    for (let i = 0; i < 3; i++) { fl.fillStyle = cols[i]; fl.fill(paths[i]); }
+    fl.fillStyle = cols[0]; fl.fill(farPath);
+    fl.lineCap = "round"; fl.lineJoin = "round";
+    fl.strokeStyle = cols[1]; fl.lineWidth = baseLW[1]; fl.stroke(midPath);
+    fl.strokeStyle = cols[2]; fl.lineWidth = baseLW[2]; fl.stroke(nearPath);
 
     // scatter ripple
     if (ripple.a > 0.01) {
