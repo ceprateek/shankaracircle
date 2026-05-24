@@ -550,21 +550,26 @@
     fl.fillRect(0, 0, W, H);
     fl.globalCompositeOperation = "source-over";
 
-    // three depth layers, batched per layer. far layer = small specks (chevron/
-    // crescent is unreadable at that size); mid + near = shallow swept-back
-    // crescents oriented along the stable heading, with a soft per-bird flap.
+    // three depth layers, batched per layer. far layer = small specks (any
+    // silhouette is unreadable at that size). mid + near render as a gull-M:
+    // one continuous stroke from right wingtip → body → left wingtip, drawn
+    // as two quadratic arcs joined at the body. each wing's control point
+    // sits at the wingtip's perpendicular distance but halfway along the
+    // backward sweep, so the wing bows outward like a banking gull from
+    // below. round line cap/join makes the body junction read as a small
+    // thickening. wingspan pulses gently via the per-bird wander phase.
     const far  = mix(mix(P.bird, P.bot, 0.34), P.glow, night);
     const midC = mix(mix(P.bird, P.bot, 0.16), P.glow, night);
     const near = mix(P.bird, P.glow, night);
     const dim  = 0.55 + 0.45 * night;
     const cols = [ rgb(far, 0.5 * dim), rgb(midC, 0.78 * dim), rgb(near, dim) ];
-    const baseR     = 1.1;                           // far-layer dot radius (smaller — reads as speck, not bubble)
-    const baseChord = [ 0, 5.5, 7.5 ];               // wing-to-wing span per layer
-    const baseLW    = [ 0, 1.0, 1.4 ];               // stroke width per layer
-    const farPath = new Path2D();
-    const midPath = new Path2D();
+    const baseR    = 1.1;                            // far-layer dot radius
+    const baseSpan = [ 0, 2.8, 3.8 ];                // wing half-span per layer (perp distance)
+    const baseBack = [ 0, 1.3, 1.7 ];                // wingtip sweep-back per layer
+    const baseLW   = [ 0, 1.0, 1.3 ];                // wing stroke width per layer
+    const farPath  = new Path2D();
+    const midPath  = new Path2D();
     const nearPath = new Path2D();
-    const paths = [ farPath, midPath, nearPath ];
 
     for (let i = 0; i < boids.length; i++) {
       const b = boids[i];
@@ -575,16 +580,20 @@
         farPath.moveTo(x + r, y); farPath.arc(x, y, r, 0, 7);
       } else {
         const flap = Math.sin(b.ph * 1.3);
-        const C = baseChord[li] * s * (0.94 + 0.06 * flap);    // gentle chord swell
-        const depth = C * (0.22 + 0.05 * flap);                 // gentle curvature swell
+        const W = baseSpan[li] * s * (0.93 + 0.07 * flap);   // span pulses ±7%
+        const back = baseBack[li] * s;
         const ux = b.hx, uy = b.hy;                  // stable heading
-        const px = -uy, py = ux;                     // perpendicular = wing axis
-        const hC = C * 0.5;
-        const lx = x + px * hC, ly = y + py * hC;
-        const rx = x - px * hC, ry = y - py * hC;
-        const cx = x - ux * depth, cy = y - uy * depth;     // control point: behind bird
-        const p = paths[li];
-        p.moveTo(lx, ly); p.quadraticCurveTo(cx, cy, rx, ry);
+        const px = -uy, py = ux;                     // perpendicular = wing axis (right = +perp)
+        // right wing: body → control (same perp as wingtip, half-back) → wingtip (full perp, full back)
+        const rtx = x + px * W - ux * back,         rty = y + py * W - uy * back;
+        const rcx = x + px * W - ux * back * 0.5,   rcy = y + py * W - uy * back * 0.5;
+        // left wing: mirror across the heading line
+        const ltx = x - px * W - ux * back,         lty = y - py * W - uy * back;
+        const lcx = x - px * W - ux * back * 0.5,   lcy = y - py * W - uy * back * 0.5;
+        const p = li === 1 ? midPath : nearPath;
+        p.moveTo(rtx, rty);
+        p.quadraticCurveTo(rcx, rcy, x, y);          // right wing into body
+        p.quadraticCurveTo(lcx, lcy, ltx, lty);      // body out to left wing
       }
     }
     fl.fillStyle = cols[0]; fl.fill(farPath);
