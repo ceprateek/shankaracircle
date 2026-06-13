@@ -380,7 +380,7 @@
     // density tied to the perception radius → ~10 neighbours within cohR
     // on every screen, which is what produces dense murmuration texture.
     const S = Math.min(W, H), cohR = Math.max(S * 0.060, 30);
-    const D = 0.16 * cohR * cohR;
+    const D = 0.29 * cohR * cohR;                  // ~0.55x the birds — thinner sky, still reads as a murmuration
     return Math.max(500, Math.min(cfg.count, Math.round((W * H) / D)));
   }
   function syncCount() {
@@ -564,9 +564,9 @@
     const dim  = 0.55 + 0.45 * night;
     const cols = [ rgb(far, 0.5 * dim), rgb(midC, 0.78 * dim), rgb(near, dim) ];
     const baseR    = 1.1;                            // far-layer dot radius
-    const baseSpan = [ 0, 2.8, 3.8 ];                // wing half-span per layer (perp distance)
-    const baseBack = [ 0, 1.3, 1.7 ];                // wingtip sweep-back per layer
-    const baseLW   = [ 0, 1.0, 1.3 ];                // wing stroke width per layer
+    const baseSpan = [ 0, 2.6, 3.5 ];                // wing half-span per layer (perp distance)
+    const baseBack = [ 0, 1.5, 2.0 ];                // wingtip sweep-back per layer
+    const baseLW   = [ 0, 1.3, 1.7 ];                // wing stroke width per layer — thicker, less spindly
     const farPath  = new Path2D();
     const midPath  = new Path2D();
     const nearPath = new Path2D();
@@ -582,14 +582,16 @@
         const flap = Math.sin(b.ph * 1.3);
         const W = baseSpan[li] * s * (0.93 + 0.07 * flap);   // span pulses ±7%
         const back = baseBack[li] * s;
+        const tip = W * 0.94;                        // wingtip drawn in a touch so it droops behind the crook
+        const cback = back * 0.30;                   // control barely swept back → leading edge bows out (gull crook)
         const ux = b.hx, uy = b.hy;                  // stable heading
         const px = -uy, py = ux;                     // perpendicular = wing axis (right = +perp)
-        // right wing: body → control (same perp as wingtip, half-back) → wingtip (full perp, full back)
-        const rtx = x + px * W - ux * back,         rty = y + py * W - uy * back;
-        const rcx = x + px * W - ux * back * 0.5,   rcy = y + py * W - uy * back * 0.5;
+        // right wing: body → control (full span, lightly back → bowed leading edge) → wingtip (drawn-in, full back)
+        const rtx = x + px * tip - ux * back,        rty = y + py * tip - uy * back;
+        const rcx = x + px * W   - ux * cback,       rcy = y + py * W   - uy * cback;
         // left wing: mirror across the heading line
-        const ltx = x - px * W - ux * back,         lty = y - py * W - uy * back;
-        const lcx = x - px * W - ux * back * 0.5,   lcy = y - py * W - uy * back * 0.5;
+        const ltx = x - px * tip - ux * back,        lty = y - py * tip - uy * back;
+        const lcx = x - px * W   - ux * cback,       lcy = y - py * W   - uy * cback;
         const p = li === 1 ? midPath : nearPath;
         p.moveTo(rtx, rty);
         p.quadraticCurveTo(rcx, rcy, x, y);          // right wing into body
